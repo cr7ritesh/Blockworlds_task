@@ -3,7 +3,7 @@ This repo contains the source code for making plans based on problems decribed b
 
 ## Dependency
 
-1. Install GPT API. Remember to put openai_keys under the ```keys``` folder.
+1. Install Cohere API. Put API key under the ```.env``` file.
 
 2. Install fast-download.
 
