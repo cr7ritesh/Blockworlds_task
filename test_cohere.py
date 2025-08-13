@@ -200,6 +200,7 @@ def test_model_variants():
             
             end_time = time.time()
             print(f"✅ {model}: {response.text.strip()} (took {end_time - start_time:.2f}s)")
+            return True
             
         except Exception as e:
             print(f"❌ {model} failed: {e}")
@@ -225,6 +226,8 @@ def run_all_tests():
         try:
             if test():
                 passed += 1
+            else:
+                print(f"❌ Test {test.__name__} has issues")
         except Exception as e:
             print(f"❌ Test {test.__name__} failed with exception: {e}")
     
