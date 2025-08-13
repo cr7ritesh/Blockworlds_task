@@ -13,3 +13,5 @@ condor*
 keys
 downward*
 .env
+VAL/
+*.log

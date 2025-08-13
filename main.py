@@ -26,8 +26,9 @@ def get_cost(x):
         cost = float(splitted[counter+2])
     return cost
 
-class Domain:
+class Blocksworld:
     def __init__(self):
+        self.name = 'blocksworld'
         self.context = ("p_example.nl", "p_example.pddl", "p_example.sol")
         self.tasks = [] # should be list of tuples like (descritpion, ground_truth_pddl)
 
@@ -56,28 +57,28 @@ class Domain:
 
     def get_task(self, i):
         nl_f, pddl_f = self.get_task_file(i)
-        with open(nl_f, 'r') as f:
-            nl = f.read()
-        with open(pddl_f, 'r') as f:
-            pddl = f.read()
+        
+        with open(nl_f, 'r') as f:nl = f.read()
+        with open(pddl_f, 'r') as f:pddl = f.read()
+        
         return nl.strip(), pddl.strip()
 
     def get_context(self):
-        nl_f   = f"./domains/{self.name}/{self.context[0]}"
+        nl_f = f"./domains/{self.name}/{self.context[0]}"
         pddl_f = f"./domains/{self.name}/{self.context[1]}"
-        sol_f  = f"./domains/{self.name}/{self.context[2]}"
-        with open(nl_f, 'r') as f:
-            nl   = f.read()
-        with open(pddl_f, 'r') as f:
-            pddl = f.read()
-        with open(sol_f, 'r') as f:
-            sol  = f.read()
+        sol_f = f"./domains/{self.name}/{self.context[2]}"
+        
+        with open(nl_f, 'r') as f:nl = f.read()
+        with open(pddl_f, 'r') as f:pddl = f.read()
+        with open(sol_f, 'r') as f:sol = f.read()
+        
         return nl.strip(), pddl.strip(), sol.strip()
 
     def get_domain_pddl(self):
         domain_pddl_f = self.get_domain_pddl_file()
-        with open(domain_pddl_f, 'r') as f:
-            domain_pddl = f.read()
+        
+        with open(domain_pddl_f, 'r') as f:domain_pddl = f.read()
+        
         return domain_pddl.strip()
 
     def get_domain_pddl_file(self):return f"./domains/blocksworld/domain.pddl"
@@ -92,9 +93,6 @@ class Domain:
         return domain_nl.strip()
 
     def get_domain_nl_file(self):return f"./domains/blocksworld/domain.nl"
-
-class Blocksworld(Domain):
-    name = "blocksworld" 
 
 ###############################################################################
 #
@@ -197,12 +195,9 @@ def llm_ic_pddl_planner(args, planner, domain):
     plan_folder    = f"./experiments/run{args.run}/plans/llm_ic_pddl/{domain.name}"
     result_folder  = f"./experiments/run{args.run}/results/llm_ic_pddl/{domain.name}"
 
-    if not os.path.exists(problem_folder):
-        os.system(f"mkdir -p {problem_folder}")
-    if not os.path.exists(plan_folder):
-        os.system(f"mkdir -p {plan_folder}")
-    if not os.path.exists(result_folder):
-        os.system(f"mkdir -p {result_folder}")
+    os.makedirs(problem_folder, exist_ok=True)
+    os.makedirs(plan_folder, exist_ok=True)
+    os.makedirs(result_folder, exist_ok=True)
 
     task = args.task
 
@@ -262,12 +257,9 @@ def llm_pddl_planner(args, planner, domain):
     plan_folder    = f"./experiments/run{args.run}/plans/llm_pddl/{domain.name}"
     result_folder  = f"./experiments/run{args.run}/results/llm_pddl/{domain.name}"
 
-    if not os.path.exists(problem_folder):
-        os.system(f"mkdir -p {problem_folder}")
-    if not os.path.exists(plan_folder):
-        os.system(f"mkdir -p {plan_folder}")
-    if not os.path.exists(result_folder):
-        os.system(f"mkdir -p {result_folder}")
+    os.makedirs(problem_folder, exist_ok=True)
+    os.makedirs(plan_folder, exist_ok=True)
+    os.makedirs(result_folder, exist_ok=True)
 
     task = args.task
 
@@ -321,29 +313,26 @@ def llm_planner(args, planner, domain):
     Baseline method:
         The LLM will be asked to directly give a plan based on the task description.
     """
-    domain_nl        = domain.get_domain_nl()
+    domain_nl = domain.get_domain_nl()
     
     # create the tmp / result folders
     problem_folder = f"./experiments/run{args.run}/problems/llm/{domain.name}"
-    plan_folder    = f"./experiments/run{args.run}/plans/llm/{domain.name}"
-    result_folder  = f"./experiments/run{args.run}/results/llm/{domain.name}"
+    plan_folder = f"./experiments/run{args.run}/plans/llm/{domain.name}"
+    result_folder = f"./experiments/run{args.run}/results/llm/{domain.name}"
 
-    if not os.path.exists(problem_folder):
-        os.system(f"mkdir -p {problem_folder}")
-    if not os.path.exists(plan_folder):
-        os.system(f"mkdir -p {plan_folder}")
-    if not os.path.exists(result_folder):
-        os.system(f"mkdir -p {result_folder}")
+    os.makedirs(problem_folder, exist_ok=True)
+    os.makedirs(plan_folder, exist_ok=True)
+    os.makedirs(result_folder, exist_ok=True)
 
     task = args.task
 
     start_time = time.time()
 
     # A. generate problem pddl file
-    task_suffix        = domain.get_task_suffix(task)
+    task_suffix = domain.get_task_suffix(task)
     task_nl, _ = domain.get_task(task) 
-    prompt             = planner.create_llm_prompt(task_nl, domain_nl)
-    text_plan          = planner.query(prompt)
+    prompt = planner.create_llm_prompt(task_nl, domain_nl)
+    text_plan = planner.query(prompt)
 
     # B. write the problem file into the problem folder
     text_plan_file_name = f"./experiments/run{args.run}/results/llm/{task_suffix}"
@@ -365,12 +354,9 @@ def llm_ic_planner(args, planner, domain):
     plan_folder    = f"./experiments/run{args.run}/plans/llm_ic/{domain.name}"
     result_folder  = f"./experiments/run{args.run}/results/llm_ic/{domain.name}"
 
-    if not os.path.exists(problem_folder):
-        os.system(f"mkdir -p {problem_folder}")
-    if not os.path.exists(plan_folder):
-        os.system(f"mkdir -p {plan_folder}")
-    if not os.path.exists(result_folder):
-        os.system(f"mkdir -p {result_folder}")
+    os.makedirs(problem_folder, exist_ok=True)
+    os.makedirs(plan_folder, exist_ok=True)
+    os.makedirs(result_folder, exist_ok=True)
 
     task = args.task
 
@@ -401,8 +387,7 @@ def print_all_prompts(planner):
         f"./prompts/llm_pddl/{domain.name}",
         f"./prompts/llm_ic_pddl/{domain.name}"]:
         
-        if not os.path.exists(folder_name):
-            os.system(f"mkdir -p {folder_name}")
+        os.makedirs(folder_name, exist_ok=True)
 
     for task in range(len(domain)):
         task_nl, _ = domain.get_task(task) 
@@ -429,10 +414,10 @@ if __name__ == "__main__":
                                                        "llm_pddl_planner",
                                                        "llm_planner",
                                                        "llm_ic_planner"],
-                                              default="llm_ic_pddl_planner")
+                                              default="llm_planner")
     parser.add_argument('--time-limit', type=int, default=200)
-    parser.add_argument('--task', type=int, default=2)
-    parser.add_argument('--run', type=int, default=0)
+    parser.add_argument('--task', type=int, default=0)
+    parser.add_argument('--run', type=int, default=2)
     parser.add_argument('--print-prompts', action='store_true')
     args = parser.parse_args()
 
@@ -450,5 +435,7 @@ if __name__ == "__main__":
         "llm_ic_planner"        : llm_ic_planner
     }[args.method]
 
-    if args.print_prompts:print_all_prompts(planner)
-    else:method(args, planner, domain)
+    if args.print_prompts:
+        print_all_prompts(planner)
+    else:
+        method(args, planner, domain)
