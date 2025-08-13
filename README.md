@@ -1,4 +1,4 @@
-# LLM+P: Empowering Large Language Models with Optimal Planning Proficiency
+# LLM+P code
 This repo contains the source code for making plans based on problems decribed by natural language.
 
 ## Dependency
