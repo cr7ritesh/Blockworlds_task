@@ -1,31 +1,67 @@
-(define (domain block-world)
-  (:requirements :strips :equality)
-  (:types block arm)
-  (:predicates (clear ?x)
-               (on ?x ?y)
-               (holding ?arm ?x))
-  (:functions)
-  (:action pickup
-    :parameters (?arm ?x - block)
-    :precondition (and (clear ?x) (not (holding ?arm ?x)))
-    :effect (and (holding ?arm ?x)
-                 (not (clear ?x))
-                 (not (holding ?arm ?y))))
-  (:action putdown
-    :parameters (?arm ?x - block)
-    :precondition (holding ?arm ?x)
-    :effect (and (clear ?x)
-                 (not (holding ?arm ?x))
-                 (not (on ?x ?y))))
-  (:action stack
-    :parameters (?arm ?x ?y - block)
-    :precondition (and (holding ?arm ?x) (clear ?y))
-    :effect (and (on ?x ?y)
-                 (not (holding ?arm ?x))
-                 (not (clear ?y))))
-  (:action unstack
-    :parameters (?arm ?x ?y - block)
-    :precondition (and (clear ?x) (on ?x ?y) (not (holding ?arm ?z)))
-    :effect (and (holding ?arm ?x)
-                 (clear ?y)
-                 (not (on ?x ?y)))))
+(defdomain blockworld
+
+(:requirements :strips :equality)
+
+(:types arm block - object
+
+clear
+
+)
+
+(:predicates (on ?b1 - block ?b2 - block)
+
+(clear ?b - block)
+
+(holding ?a - arm ?b - block)
+
+)
+
+(:action pickup
+
+:parameters (?a - arm ?b - block)
+
+:precondition (and (clear ?b) (not (holding ?a ?b)))
+
+:effect (and (holding ?a ?b) (not (clear ?b)) (not (holding ?a ?b)))
+
+)
+
+)
+
+(:action putdown
+
+:parameters (?a - arm ?b - block)
+
+:precondition (holding ?a ?b)
+
+:effect (and (not (holding ?a ?b)) (clear ?b) (not (on ?b ?b)))
+
+)
+
+)
+
+(:action stack
+
+:parameters (?a - arm ?b1 ?b2 - block)
+
+:precondition (and (holding ?a ?b1) (clear ?b2))
+
+:effect (and (on ?b1 ?b2) (not (holding ?a ?b1)) (not (clear ?b2)))
+
+)
+
+)
+
+(:action unstack
+
+:parameters (?a - arm ?b1 ?b2 - block)
+
+:precondition (and (on ?b1 ?b2) (clear ?a))
+
+:effect (and (holding ?a ?b1) (clear ?b2) (not (on ?b1 ?b2)))
+
+)
+
+)
+
+)

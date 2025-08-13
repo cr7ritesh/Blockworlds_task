@@ -1,4 +1,4 @@
-(define (domain blocksworld-3ops)
+(define (domain blocksworld-3blocks)
   (:requirements :strips)
   (:predicates (clear ?x)
              (on-table ?x)
@@ -23,4 +23,10 @@
    :precondition (and (clear ?underob) (holding ?ob))
    :effect (and (arm-empty) (clear ?ob) (on ?ob ?underob)
                 (not (clear ?underob)) (not (holding ?ob))))
+
+  (:action unstack
+   :parameters (?ob ?underob)
+   :precondition (and (on ?ob ?underob) (clear ?ob) (arm-empty))
+   :effect (and (holding ?ob) (clear ?underob)
+                (not (on ?ob ?underob)) (not (clear ?ob)) (not (arm-empty))))
 )

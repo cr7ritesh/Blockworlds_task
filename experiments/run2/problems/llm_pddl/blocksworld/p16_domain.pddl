@@ -1,26 +1,28 @@
-(defdomain blockworld
-:requirements :strips
-:types block arm - object
-:predicates (on ?b1 ?b2)
-(clear ?b)
-(holding ?a ?b)
-(ontable ?b)
-:action pickup
-:parameters (?a - arm ?b - block)
-:precondition (and (clear ?b) (ontable ?b) (not (holding ?a ?b)))
-:effect (and (not (ontable ?b)) (not (clear ?b)) (holding ?a ?b))
-)
-:action putdown
-:parameters (?a - arm ?b - block)
-:precondition (holding ?a ?b)
-:effect (and (ontable ?b) (clear ?b) (not (holding ?a ?b)))
-)
-:action stack
-:parameters (?b1 ?b2 - block ?a - arm)
-:precondition (and (holding ?a ?b1) (clear ?b2) (on ?b2 ?b1))
-:effect (and (not (holding ?a ?b1)) (not (clear ?b2)) (on ?b1 ?b2))
-)
-:action unstack
-:parameters (?b1 ?b2 - block ?a - arm)
-:precondition (and (clear ?b1) (on ?b1 ?b2) (not (holding ?a ?b1)))
-:effect (and (holding ?a ?b1) (clear ?b2) (not (on ?b1 ?b2))))
+(define (domain block-world)
+  (:requirements :strips :equality)
+  (:types block arm)
+  (:predicates (clear ?x - block)
+               (on ?x - block ?y - block)
+               (ontable ?x - block)
+               (holding ?x - block ?y - arm))
+  (:functions (total-cost))
+  (:action pickup
+    :parameters (?b - block ?a - arm)
+    :precondition (and (clear ?b) (ontable ?b) (empty ?a))
+    :effect (and (holding ?b ?a) (not (ontable ?b)) (not (clear ?b))))
+  (:action putdown
+    :parameters (?b - block ?a - arm)
+    :precondition (holding ?b ?a)
+    :effect (and (ontable ?b) (clear ?b) (empty ?a) (not (holding ?b ?a))))
+  (:action stack
+    :parameters (?b1 ?b2 - block ?a - arm)
+    :precondition (and (holding ?b1 ?a) (clear ?b2) (on ?b2 ?b1))
+    :effect (and (on ?b1 ?b2) (empty ?a) (not (holding ?b1 ?a)) (not (clear ?b2))))
+  (:action unstack
+    :parameters (?b1 ?b2 - block ?a - arm)
+    :precondition (and (empty ?a) (clear ?b1) (on ?b1 ?b2))
+    :effect (and (holding ?b1 ?a) (clear ?b2) (not (on ?b1 ?b2)) (not (clear ?b1))))
+  (:action move
+    :parameters ()
+    :precondition ()
+    :effect (and (increase (total-cost) 1))))

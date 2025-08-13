@@ -418,13 +418,16 @@ def llm_ic_pddl_planner(args, planner, domain):
     # D. collect the least cost plan
     best_cost = 1e10
     best_plan = None
-    for fn in glob.glob(f"{plan_file_name}.*"):
+    for fn in glob.glob(f"{plan_file_name}"):
         with open(fn, "r") as f:
-            plans = f.readlines()
-            cost = get_cost(plans[-1])
-            if cost < best_cost:
-                best_cost = cost
-                best_plan = "\n".join([p.strip() for p in plans[:-1]])
+            try:
+                plans = f.readlines()
+                cost = get_cost(plans[-1])
+                if cost < best_cost:
+                    best_cost = cost
+                    best_plan = "\n".join([p.strip() for p in plans[:-1]])
+            except:
+                continue
 
     # E. Log results and save
     end_time = time.time()
@@ -522,7 +525,7 @@ def llm_pddl_planner(args, planner, domain):
     # D. collect the least cost plan
     best_cost = 1e10
     best_plan = None
-    for fn in glob.glob(f"{plan_file_name}.*"):
+    for fn in glob.glob(f"{plan_file_name}"):
         with open(fn, "r") as f:
             try:
                 plans = f.readlines()

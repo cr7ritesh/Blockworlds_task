@@ -1,31 +1,25 @@
-(define (domain block-world)
-  (:requirements :strips :equality)
-  (:types block arm)
-  (:predicates (clear ?x)
-              (on-table ?x)
-              (holding ?a -arm ?x -block)
-              (on ?x -block ?y -block))
-  (:action pickup
-    :parameters (?a -arm ?x -block)
-    :precondition (and (clear ?x) (not (holding ?a ?x)))
-    :effect (and (holding ?a ?x)
-                 (not (clear ?x))
-                 (not (on-table ?x))))
-  (:action putdown
-    :parameters (?a -arm ?x -block)
-    :precondition (holding ?a ?x)
-    :effect (and (clear ?x)
-                 (on-table ?x)
-                 (not (holding ?a ?x))))
-  (:action stack
-    :parameters (?x -block ?y -block)
-    :precondition (and (clear ?x) (holding ?arm ?y))
-    :effect (and (on ?x ?y)
-                 (not (clear ?x))
-                 (not (holding ?arm ?y))))
-  (:action unstack
-    :parameters (?x -block ?y -block)
-    :precondition (and (clear ?x) (on ?x ?y))
-    :effect (and (holding ?arm ?y)
-                 (clear ?x)
-                 (not (on ?x ?y)))))
+(defdomain blockworld)
+
+(defstruct block (clear)
+  (:print-function (lambda (block) (format nil "b~a" (block-clear block)))))
+
+(defpred clear ?b - block)
+(defpred on ?b1 ?b2 - block)
+
+(defmethod (hold) ()
+  (and (exists (?b - block) (not (clear ?b)))))
+
+(defmethod (table ?b - block) ()
+  (and (clear ?b) (not (hold))))
+
+(defmethod (pickup ?b - block) (hold)
+  (and (clear ?b) (not (hold)) (not (on ?b ?b2))))
+
+(defmethod (putdown ?b - block) (not(hold))
+  (and (not (clear ?b)) (hold) (not (on ?b ?b2)))))
+
+(defmethod (stack ?b1 ?b2 - block) (and (hold) (clear ?b1) (on ?b2 ?b1))
+  (and (not (hold)) (not (clear ?b1)) (on ?b2 ?b1) (not (on ?b1 ?b3)))))
+
+(defmethod (unstack ?b1 ?b2 - block) (and (not(hold)) (clear ?b1) (on ?b2 ?b1))
+  (and (hold) (clear ?b2) (not (on ?b2 ?b1)) (not (on ?b1 ?b3)))))

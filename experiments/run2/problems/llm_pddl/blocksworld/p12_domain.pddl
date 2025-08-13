@@ -1,30 +1,27 @@
 (defdomain blockworld
-(:requirements :strips :equality)
-
-(:types block arm - object)
-
-(:predicates
-(on ?b1 - block ?b2 - block)
+:requirements :strips
+:types block arm - object
+:predicates (on ?b1 - block ?b2 - block)
 (clear ?b - block)
-(ontable ?b - block)
-(holding ?a - arm ?b - block))
-
-(:action pickup
-:parameters (?a - arm ?b - block)
-:precondition (and (ontable ?b) (clear ?b) (not (holding ?a ?b_)))
-:effect (and (not (ontable ?b)) (not (clear ?b)) (holding ?a ?b) (not (holding ?a ?b_))))
-
-(:action putdown
-:parameters (?a - arm ?b - block)
-:precondition (holding ?a ?b)
-:effect (and (ontable ?b) (clear ?b) (not (holding ?a ?b))))
-
-(:action stack
-:parameters (?a - arm ?b1 ?b2 - block)
-:precondition (and (holding ?a ?b1) (on ?b2 ?b1) (clear ?b2))
-:effect (and (not (holding ?a ?b1)) (on ?b1 ?b2) (not (clear ?b2))))
-
-(:action unstack
-:parameters (?a - arm ?b1 ?b2 - block)
-:precondition (and (not (holding ?a ?b1)) (on ?b1 ?b2) (clear ?b1))
-:effect (and (holding ?a ?b1) (not (on ?b1 ?b2)) (clear ?b2))))
+(armempty)
+(armhold ?b - block)
+:action pickup
+:parameters (?b - block)
+:precondition (and (clear ?b) (armempty))
+:effect (and (not (clear ?b)) (not (armempty)) (armhold ?b))
+)
+:action putdown
+:parameters (?b - block)
+:precondition (armhold ?b)
+:effect (and (clear ?b) (armempty) (not (armhold ?b))
+)
+:action stack
+:parameters (?b1 ?b2 - block)
+:precondition (and (clear ?b1) (armhold ?b2))
+:effect (and (on ?b2 ?b1) (not (clear ?b1)) (armempty) (not (armhold ?b2))
+)
+:action unstack
+:parameters (?b1 ?b2 - block)
+:precondition (and (clear ?b1) (on ?b2 ?b1) (armempty))
+:effect (and (armhold ?b2) (not (on ?b2 ?b1)) (clear ?b1) (not (armempty))
+)

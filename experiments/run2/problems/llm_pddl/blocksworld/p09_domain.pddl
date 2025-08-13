@@ -1,42 +1,22 @@
-(defdomain blockworld)
-
-(declare (action pickup putdown stack unstack))
-
-(declare (obj types block arm table))
-
-(defobjtype block (aspects on clear))
-
-(defobjtype arm (aspects holding))
-
-(defobjtype table (aspects on))
-
-(defaspect on
-(parameters ?b - block ?x block table))
-
-(defaspect clear
-(parameters ?b - block)
-(exclusive with on))
-
-(defaspect holding
-(parameters ?b - block)
-(exclusive with on))
-
-(defaction pickup
-:parameters (?a - arm ?b - block)
-:precondition (and (on ?b table) (clear ?b) (not (holding ?a ?b)))
-:effect (and (not (on ?b table)) (not (clear ?b)) (holding ?a ?b)))
-
-(defaction putdown
-:parameters (?a - arm ?b - block)
-:precondition (and (holding ?a ?b) (clear ?b))
-:effect (and (on ?b table) (clear ?b) (not (holding ?a ?b))))
-
-(defaction stack
-:parameters (?a - arm ?b ?c - block)
-:precondition (and (on ?c table) (clear ?c) (holding ?a ?b))
-:effect (and (not (on ?c table)) (not (clear ?c)) (on ?b ?c) (not (holding ?a ?b))))
-
-(defaction unstack
-:parameters (?a - arm ?b ?c - block)
-:precondition (and (on ?b ?c) (clear ?b) (not (holding ?a ?b)))
-:effect (and (holding ?a ?b) (clear ?c) (not (on ?b ?c))))
+(define (domain block-world)
+  (:requirements :strips :equality)
+  (:types block arm)
+  (:predicates (on ?b1 - block ?b2 - block)
+               (clear ?b - block)
+               (holding ?a - arm ?b - block))
+  (:action pickup
+    :parameters (?a - arm ?b - block)
+    :precondition (and (clear ?b) (not (holding ?a ?b)))
+    :effect (and (holding ?a ?b) (not (clear ?b)) (not (holding ?a ?b)))))
+  (:action putdown
+    :parameters (?a - arm ?b - block)
+    :precondition (holding ?a ?b)
+    :effect (and (not (holding ?a ?b)) (clear ?b))))
+  (:action stack
+    :parameters (?b1 ?b2 - block)
+    :precondition (and (clear ?b1) (not (clear ?b2)) (not (on ?b1 ?b2)))
+    :effect (and (on ?b1 ?b2) (not (clear ?b1)))))
+  (:action unstack
+    :parameters (?b1 ?b2 - block)
+    :precondition (and (clear ?b1) (on ?b1 ?b2))
+    :effect (and (not (on ?b1 ?b2)) (clear ?b2) (not (clear ?b1))))))

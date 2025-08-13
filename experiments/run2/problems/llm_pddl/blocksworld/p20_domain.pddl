@@ -1,38 +1,61 @@
-(defdomain blockworld)
+(define (problem blockworld)
+	(:domain blockworld)
+	(:objects 
+		b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 - block
+	)
+	(:init 
+		(arm-empty)
+		(on-table b7)
+		(on-table b2)
+		(on-table b6)
+		(on-table b8)
+		(clear b6)
+		(clear b11)
+		(clear b7)
+		(clear b5)
+		(on b4 b10)
+		(on b11 b4)
+		(on b5 b8)
+		(on b12 b2)
+		(on b3 b9)
+		(on b1 b12)
+		(on b10 b3)
+		(on b9 b1)
+	)
+	(:goal 
+		(and 
+			(on b1 b6)
+			(on b5 b3)
+			(on b6 b2)
+			(on b8 b9)
+			(on b9 b10)
+			(on b10 b1)
+			(on b11 b12)
+			(on b12 b8)
+		)
+	)
+)
 
-(defstruct block (on))
+(define (action pickup)
+	:parameters (?b - block)
+	:precondition (and (on-table ?b) (arm-empty) (clear ?b))
+	:effect (and (not (on-table ?b)) (not (arm-empty)) (not (clear ?b)))
+)
 
-(defrole arm
-  :initial (empty)
-  :either (empty holding)
-  :inverse (holding arm))
+(define (action putdown)
+	:parameters (?b - block)
+	:precondition (not (arm-empty))
+	:effect (and (on-table ?b) (arm-empty) (clear ?b))
+)
 
-(defrole table
-  :types block
-  :initial (clear not-clear)
-  :either (clear not-clear)
-  :inverse (on table))
+(define (action stack)
+	:parameters (?top ?bottom - block)
+	:precondition (and (arm-empty) (on ?top ?bottom) (clear ?top))
+	:effect (and (not (on ?top ?bottom)) (not (arm-empty)) (not (clear ?top)))
+)
 
-(defrole on
-  :types block
-  :inverse (on block))
-
-(defaction pickup
-  :parameters (?b - block)
-  :precondition (and (clear ?b) (empty))
-  :effect (and (not (clear ?b)) (not (empty)) (holding ?b) (not (on ?b table))))
-
-(defaction putdown
-  :parameters (?b - block)
-  :precondition (holding ?b)
-  :effect (and (empty) (not (holding ?b)) (clear ?b) (on ?b table)))
-
-(defaction stack
-  :parameters (?b1 ?b2 - block)
-  :precondition (and (holding ?b1) (clear ?b2) (on ?b2 table))
-  :effect (and (empty) (not (holding ?b1)) (not (clear ?b2)) (on ?b1 ?b2) (not (on ?b2 table))))
-
-(defaction unstack
-  :parameters (?b1 ?b2 - block)
-  :precondition (and (empty) (clear ?b1) (on ?b1 ?b2))
-  :effect (and (holding ?b1) (clear ?b2) (on ?b2 table) (not (on ?b1 ?b2)) (not (clear ?b1))))
+(define (action unstack)
+	:parameters (?top ?bottom - block)
+	:precondition (and (arm-empty) (on ?top ?bottom) (clear ?top))
+	:effect (and (not (on ?top ?bottom)) (not (arm-empty)) (clear ?bottom))
+)
