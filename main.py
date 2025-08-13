@@ -5,9 +5,6 @@ import time
 import backoff
 import subprocess
 import json
-import io
-import sys
-from contextlib import redirect_stderr, redirect_stdout
 from dotenv import load_dotenv
 
 import cohere
@@ -15,7 +12,8 @@ import cohere
 load_dotenv()
 
 # FAST_DOWNWARD_ALIAS = "lama"
-FAST_DOWNWARD_ALIAS = "seq-opt-fdss-1"
+# FAST_DOWNWARD_ALIAS = "seq-opt-fdss-1"
+FAST_DOWNWARD_ALIAS = "seq-opt-lmcut"  # Default alias for Fast Downward planner
 
 class Logger:
     """Logger class to capture and store logs for RAG documentation"""
