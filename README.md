@@ -3,8 +3,7 @@ This repo contains the source code for making plans based on problems decribed b
 
 ## Dependency
 
-1. Install Cohere API. Put API key under the ```.env``` file.
-
+1. Install Cohere library. Put Cohere API key under the ```.env``` file.
 2. Install fast-download.
 
 ## Running Code
@@ -29,8 +28,7 @@ bash run.sh DOMAIN METHOD TASK_ID
 ```
 llm-pddl
  └─main.py                         (the main python script)
- └─keys
-    └─ openai_keys.txt             (you should place your openai keys here, one line each)
+ └─.env                            (you should place your cohere key here)
  └─domains                         (the generated domain files)
     └─ blocksworld
         └─ description_geneator.py (generating natural language description)
@@ -39,22 +37,23 @@ llm-pddl
         └─ domain.pddl             (the shared domain.pddl file for all problems)
         └─ xxx.nl                  (task natural language description)
         └─ xxx.pddl                (ground-truth problem pddl, might not be used)
- └─problems                        (the generated problem pddl files)
-    └─ llm                         (empty, since llm -> plan does not generate pddl)
-    └─ llm_ic                      (empty, since llm + context -> plan does not generate pddl)    
-    └─ llm_pddl                    (baseline 2: llm -> p.pddl)
-    └─ llm_ic_pddl                 (ours: llm + context -> p.pddl)
-        └─ blocksworld
- └─plans                           (the tmp folder for storing raw solutions found by fast-downward)
-    └─ llm                         (empty, since llm -> plan does not generate raw plans)
-    └─ llm_ic                      (empty, since llm + context -> plan does not generate raw plans)
-    └─ llm_pddl                    (baseline 2: llm -> p.pddl)
-    └─ llm_ic_pddl                 (ours: llm + context -> p.pddl)
-        └─ blocksworld
- └─results                         (the final plan in natural language)
-    └─ llm                         (baseline 1: llm -> plan)
-    └─ llm_ic                      (baseline 3: llm + context -> plan)
-    └─ llm_pddl                    (baseline 2: llm -> p.pddl)
-    └─ llm_ic_pddl                 (ours: llm + context -> p.pddl)
-        └─ blocksworld
+ └─experiments
+   └─problems                        (the generated problem pddl files)
+      └─ llm                         (empty, since llm -> plan does not generate pddl)
+      └─ llm_ic                      (empty, since llm + context -> plan does not generate pddl)    
+      └─ llm_pddl                    (baseline 2: llm -> p.pddl)
+      └─ llm_ic_pddl                 (ours: llm + context -> p.pddl)
+         └─ blocksworld
+   └─plans                           (the tmp folder for storing raw solutions found by fast-downward)
+      └─ llm                         (empty, since llm -> plan does not generate raw plans)
+      └─ llm_ic                      (empty, since llm + context -> plan does not generate raw plans)
+      └─ llm_pddl                    (baseline 2: llm -> p.pddl)
+      └─ llm_ic_pddl                 (ours: llm + context -> p.pddl)
+         └─ blocksworld
+   └─results                         (the final plan in natural language)
+      └─ llm                         (baseline 1: llm -> plan)
+      └─ llm_ic                      (baseline 3: llm + context -> plan)
+      └─ llm_pddl                    (baseline 2: llm -> p.pddl)
+      └─ llm_ic_pddl                 (ours: llm + context -> p.pddl)
+         └─ blocksworld
  ```
