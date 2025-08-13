@@ -1,9 +1,6 @@
 import argparse
 import glob
-import json
 import os
-import random
-import sys
 import time
 import backoff
 
@@ -31,23 +28,10 @@ def get_cost(x):
     return cost
 
 
-###############################################################################
-#
-# Define different problem domains
-#
-###############################################################################
 
 DOMAINS = [
-    "barman",
-    "blocksworld",
-    "floortile",
-    "grippers",
-    "storage",
-    "termes",
-    "tyreworld",
-    "manipulation"
+    "blocksworld"
 ]
-
 
 class Domain:
     def __init__(self):
@@ -73,11 +57,10 @@ class Domain:
         sorted_nls = sorted(nls)
         self.tasks = [(nl, nl.replace("nl", "pddl")) for nl in sorted_nls]
 
-    def __len__(self):
-        return len(self.tasks)
+    def __len__(self):return len(self.tasks)
 
     def get_task_suffix(self, i):
-        nl, pddl = self.tasks[i]
+        _, pddl = self.tasks[i]
         return f"{self.name}/{pddl}"
 
     def get_task_file(self, i):
@@ -128,29 +111,8 @@ class Domain:
         return domain_nl_f
 
 
-class Barman(Domain):
-    name = "barman" # this should match the directory name
-
-class Floortile(Domain):
-    name = "floortile" # this should match the directory name
-
-class Termes(Domain):
-    name = "termes" # this should match the directory name
-
-class Tyreworld(Domain):
-    name = "tyreworld" # this should match the directory name
-
-class Grippers(Domain):
-    name = "grippers" # this should match the directory name
-
-class Storage(Domain):
-    name = "storage" # this should match the directory name
-
 class Blocksworld(Domain):
     name = "blocksworld" # this should match the directory name
-
-class Manipulation(Domain):
-    name = "manipulation" # this should match the directory name
 
 ###############################################################################
 #
@@ -192,7 +154,7 @@ class Planner:
         return prompt
 
     def create_llm_tot_ic_prompt(self, task_nl, domain_nl, context, plan):
-        context_nl, context_pddl, context_sol = context
+        context_nl, _, context_sol = context
         prompt = f"Given the current state, provide the set of feasible actions and their corresponding next states, using the format 'action -> state'. \n" + \
                  f"Keep the list short. Think carefully about the requirements of the actions you select and make sure they are met in the current state. \n" + \
                  f"Start with actions that are most likely to make progress towards the goal. \n" + \
@@ -206,7 +168,7 @@ class Planner:
         return prompt
 
     def create_llm_tot_ic_value_prompt(self, task_nl, domain_nl, context, plan):
-        context_nl, context_pddl, context_sol = context
+        context_nl, _, context_sol = context
         context_sure_1 = context_sol.split('\n')[0]
         context_sure_2 = context_sol.split('\n')[0] + context_sol.split('\n')[1]
         context_impossible_1 = '\n'.join(context_sol.split('\n')[1:])
@@ -302,7 +264,7 @@ class Planner:
 
     def create_llm_ic_prompt(self, task_nl, domain_nl, context):
         # Baseline 2 (LLM-as-P with context): directly ask the LLM for plan
-        context_nl, context_pddl, context_sol = context
+        context_nl, _, context_sol = context
         prompt = f"{domain_nl} \n" + \
                  f"An example planning problem is: \n {context_nl} \n" + \
                  f"A plan for the example problem is: \n {context_sol} \n" + \
@@ -382,30 +344,10 @@ class Planner:
         self.openai_api_keys.remove(curr_key)
         self.openai_api_keys.append(curr_key)
 
-    def parse_result(self, pddl_string):
-        # remove extra texts
-        #try:
-        #    beg = pddl_string.find("```") + 3
-        #    pddl_string = pddl_string[beg: beg + pddl_string[beg:].find("```")]
-        #except:
-        #    raise Exception("[error] cannot find ```pddl-file``` in the pddl string")
+    def parse_result(self, pddl_string):return pddl_string
 
-        # remove comments, they can cause error
-        #t0 = time.time()
-        #while pddl_string.find(";") >= 0:
-        #    start = pddl_string.find(";")
-        #    i = 0
-        #    while pddl_string[start+i] != ")" and pddl_string[start+i] != "\n":
-        #        i += 1
-        #    pddl_string = pddl_string[:start] + pddl_string[start+i:]
-        #pddl_string = pddl_string.strip() + "\n"
-        #t1 = time.time()
-        #print(f"[info] remove comments takes {t1-t0} sec")
-        return pddl_string
-
-    def plan_to_language(self, plan, task_nl, domain_nl, domain_pddl):
+    def plan_to_language(self, plan, task_nl, _, domain_pddl):
         domain_pddl_ = " ".join(domain_pddl.split())
-        task_nl_ = " ".join(task_nl.split())
         prompt = f"A planning problem is described as: \n {task_nl} \n" + \
                  f"The corresponding domain PDDL file is: \n {domain_pddl_} \n" + \
                  f"The optimal PDDL plan is: \n {plan} \n" + \
@@ -426,9 +368,7 @@ def llm_ic_pddl_planner(args, planner, domain):
     context          = domain.get_context()
     domain_pddl      = domain.get_domain_pddl()
     domain_pddl_file = domain.get_domain_pddl_file()
-    domain_nl        = domain.get_domain_nl()
-    domain_nl_file   = domain.get_domain_nl_file()
-
+    
     # create the tmp / result folders
     problem_folder = f"./experiments/run{args.run}/problems/llm_ic_pddl/{domain.name}"
     plan_folder    = f"./experiments/run{args.run}/plans/llm_ic_pddl/{domain.name}"
@@ -447,7 +387,7 @@ def llm_ic_pddl_planner(args, planner, domain):
 
     # A. generate problem pddl file
     task_suffix        = domain.get_task_suffix(task)
-    task_nl, task_pddl = domain.get_task(task) 
+    task_nl, _ = domain.get_task(task) 
     prompt             = planner.create_llm_ic_pddl_prompt(task_nl, domain_pddl, context)
     raw_result         = planner.query(prompt)
     task_pddl_         = planner.parse_result(raw_result)
@@ -499,12 +439,9 @@ def llm_pddl_planner(args, planner, domain):
         Same as ours, except that no context is given. In other words, the LLM
         will be asked to directly give a problem PDDL file without any context.
     """
-    context          = domain.get_context()
-    domain_pddl      = domain.get_domain_pddl()
     domain_pddl_file = domain.get_domain_pddl_file()
     domain_nl        = domain.get_domain_nl()
-    domain_nl_file   = domain.get_domain_nl_file()
-
+    
     # create the tmp / result folders
     problem_folder = f"./experiments/run{args.run}/problems/llm_pddl/{domain.name}"
     plan_folder    = f"./experiments/run{args.run}/plans/llm_pddl/{domain.name}"
@@ -523,7 +460,7 @@ def llm_pddl_planner(args, planner, domain):
 
     # A. generate problem pddl file
     task_suffix        = domain.get_task_suffix(task)
-    task_nl, task_pddl = domain.get_task(task) 
+    task_nl, _ = domain.get_task(task) 
     prompt             = planner.create_llm_pddl_prompt(task_nl, domain_nl)
     raw_result         = planner.query(prompt)
     task_pddl_         = planner.parse_result(raw_result)
@@ -577,12 +514,8 @@ def llm_planner(args, planner, domain):
     Baseline method:
         The LLM will be asked to directly give a plan based on the task description.
     """
-    context          = domain.get_context()
-    domain_pddl      = domain.get_domain_pddl()
-    domain_pddl_file = domain.get_domain_pddl_file()
     domain_nl        = domain.get_domain_nl()
-    domain_nl_file   = domain.get_domain_nl_file()
-
+    
     # create the tmp / result folders
     problem_folder = f"./experiments/run{args.run}/problems/llm/{domain.name}"
     plan_folder    = f"./experiments/run{args.run}/plans/llm/{domain.name}"
@@ -601,7 +534,7 @@ def llm_planner(args, planner, domain):
 
     # A. generate problem pddl file
     task_suffix        = domain.get_task_suffix(task)
-    task_nl, task_pddl = domain.get_task(task) 
+    task_nl, _ = domain.get_task(task) 
     prompt             = planner.create_llm_prompt(task_nl, domain_nl)
     text_plan          = planner.query(prompt)
 
@@ -618,12 +551,8 @@ def llm_stepbystep_planner(args, planner, domain):
     Baseline method:
         The LLM will be asked to directly give a plan based on the task description.
     """
-    context          = domain.get_context()
-    domain_pddl      = domain.get_domain_pddl()
-    domain_pddl_file = domain.get_domain_pddl_file()
     domain_nl        = domain.get_domain_nl()
-    domain_nl_file   = domain.get_domain_nl_file()
-
+    
     # create the tmp / result folders
     problem_folder = f"./experiments/run{args.run}/problems/llm_step/{domain.name}"
     plan_folder    = f"./experiments/run{args.run}/plans/llm_step/{domain.name}"
@@ -642,7 +571,7 @@ def llm_stepbystep_planner(args, planner, domain):
 
     # A. generate problem pddl file
     task_suffix        = domain.get_task_suffix(task)
-    task_nl, task_pddl = domain.get_task(task) 
+    task_nl, _ = domain.get_task(task) 
     prompt             = planner.create_llm_stepbystep_prompt(task_nl, domain_nl)
     text_plan          = planner.query(prompt)
 
@@ -659,10 +588,7 @@ def llm_tot_ic_planner(args, planner, domain):
     Tree of Thoughts planner
     """
     context          = domain.get_context()
-    domain_pddl      = domain.get_domain_pddl()
-    domain_pddl_file = domain.get_domain_pddl_file()
     domain_nl        = domain.get_domain_nl()
-    domain_nl_file   = domain.get_domain_nl_file()
 
     # create the tmp / result folders
     problem_folder = f"./experiments/run{args.run}/problems/llm_tot_ic/{domain.name}"
@@ -682,7 +608,7 @@ def llm_tot_ic_planner(args, planner, domain):
 
     # A. generate problem pddl file
     task_suffix        = domain.get_task_suffix(task)
-    task_nl, task_pddl = domain.get_task(task)
+    task_nl, _ = domain.get_task(task)
     text_plan = planner.tot_bfs(task_nl, domain_nl, context, time_left=200, max_depth=10)
 
     # B. write the problem file into the problem folder
@@ -699,10 +625,7 @@ def llm_ic_planner(args, planner, domain):
         The LLM will be asked to directly give a plan based on the task description.
     """
     context          = domain.get_context()
-    domain_pddl      = domain.get_domain_pddl()
-    domain_pddl_file = domain.get_domain_pddl_file()
     domain_nl        = domain.get_domain_nl()
-    domain_nl_file   = domain.get_domain_nl_file()
 
     # create the tmp / result folders
     problem_folder = f"./experiments/run{args.run}/problems/llm_ic/{domain.name}"
@@ -722,7 +645,7 @@ def llm_ic_planner(args, planner, domain):
 
     # A. generate problem pddl file
     task_suffix        = domain.get_task_suffix(task)
-    task_nl, task_pddl = domain.get_task(task) 
+    task_nl, _ = domain.get_task(task) 
     prompt             = planner.create_llm_ic_prompt(task_nl, domain_nl, context)
     text_plan          = planner.query(prompt)
 
@@ -752,8 +675,7 @@ def print_all_prompts(planner):
                 os.system(f"mkdir -p {folder_name}")
 
         for task in range(len(domain)):
-            task_nl_file, task_pddl_file = domain.get_task_file(task) 
-            task_nl, task_pddl = domain.get_task(task) 
+            task_nl, _ = domain.get_task(task) 
             task_suffix = domain.get_task_suffix(task)
 
             llm_prompt = planner.create_llm_prompt(task_nl, domain_nl)

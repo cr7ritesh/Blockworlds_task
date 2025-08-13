@@ -6,7 +6,7 @@ conda activate base
 # ic   -> in context learning
 # pddl -> whether the method generates pddl files
 
-domain=$1 # blockworld, barman, gripper, floortile, termes, tyreworld
+domain=$1 # blockworld
 method=$2 # llm_planner, llm_ic_planner, llm_pddl_planner, llm_ic_pddl_planner
 task=$3
 run=$4
