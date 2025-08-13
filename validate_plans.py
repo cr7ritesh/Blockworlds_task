@@ -2,7 +2,6 @@ import argparse
 import glob
 import os
 import subprocess
-import time
 
 from main import *
 
