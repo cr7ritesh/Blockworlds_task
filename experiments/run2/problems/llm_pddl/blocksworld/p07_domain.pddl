@@ -1,0 +1,26 @@
+(define (domain blockworld)
+  (:requirements :strips :equality)
+  (:types block arm)
+  (:predicates (on ?b1 - block ?b2 - block)
+               (clear ?b - block)
+               (ontable ?b - block)
+               (holding ?a - arm ?b - block))
+  (:action pickup
+    :parameters (?a - arm ?b - block)
+    :precondition (and (ontable ?b) (clear ?b) (empty ?a))
+    :effect (and (holding ?a ?b) (not (ontable ?b)) (not (clear ?b)) (not (empty ?a))))
+  )
+  (:action putdown
+    :parameters (?a - arm ?b - block)
+    :precondition (holding ?a ?b)
+    :effect (and (ontable ?b) (clear ?b) (empty ?a) (not (holding ?a ?b))))
+  (:action stack
+    :parameters (?b1 ?b2 - block)
+    :precondition (and (holding ?arm ?b1) (clear ?b2) (on ?table ?b2))
+    :effect (and (on ?b1 ?b2) (not (clear ?b2)) (not (holding ?arm ?b1)) (empty ?arm)))
+  )
+  (:action unstack
+    :parameters (?b1 ?b2 - block)
+    :precondition (and (clear ?b1) (on ?b1 ?b2) (empty ?arm))
+    :effect (and (holding ?arm ?b1) (clear ?b2) (not (on ?b1 ?b2)) (not (empty ?arm))))
+)

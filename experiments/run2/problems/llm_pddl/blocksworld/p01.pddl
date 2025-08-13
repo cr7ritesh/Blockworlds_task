@@ -1,0 +1,10 @@
+(define (problem block-problem)
+  (:domain blockworld)
+  (:objects b1 b2 b3 - block
+            a1 - arm)
+  (:init (on b2 b3)
+         (on b3 b1)
+         (clear b2)
+         (on table b1)
+         (arm-empty a1))
+  (:goal (and (on b2 b3) (on b3 b1)))
