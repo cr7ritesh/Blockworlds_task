@@ -5,11 +5,22 @@ import time
 import backoff
 import subprocess
 import json
+import re
 from dotenv import load_dotenv
+from pinecone import ServerlessSpec, Pinecone as pc
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_cohere import CohereEmbeddings
+from langchain_pinecone import PineconeVectorStore
+from langchain_core.documents import Document
 
 import cohere
 
 load_dotenv()
+
+# Pinecone RAG Configuration
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_INDEX_NAME = "rag-knowledge"
 
 # FAST_DOWNWARD_ALIAS = "lama"
 # FAST_DOWNWARD_ALIAS = "seq-opt-fdss-1"
@@ -332,6 +343,294 @@ class Planner:
         
         return pddl_text
 
+# RAG Helper Functions for llm_ic_pddl_rag
+def run_llm_ic_pddl_internal(task_id: int, run: int, time_limit: int = 200):
+    """Run the original llm_ic_pddl method and return results"""
+    print(f"Running llm_ic_pddl for task {task_id}, run {run}...")
+    
+    try:
+        # Run the main.py with llm_ic_pddl method
+        cmd = [
+            "python", "main.py", 
+            "--method", "llm_ic_pddl_planner",
+            "--task", str(task_id),
+            "--run", str(run),
+            "--time-limit", str(time_limit)
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        # Parse the output for errors
+        stdout = result.stdout
+        stderr = result.stderr
+        exit_code = result.returncode
+        
+        print(f"llm_ic_pddl completed with exit code: {exit_code}")
+        
+        # Try to find the log file
+        log_pattern = f"./logs/run{run}/task_{task_id}_llm_ic_pddl*.json"
+        log_files = sorted(glob.glob(log_pattern), key=os.path.getmtime, reverse=True)
+        
+        log_data = None
+        if log_files:
+            with open(log_files[0], 'r', encoding='utf-8') as f:
+                log_data = json.load(f)
+        
+        return {
+            "success": exit_code == 0 and log_data and log_data.get("plan_found", False),
+            "exit_code": exit_code,
+            "stdout": stdout,
+            "stderr": stderr,
+            "log_data": log_data,
+            "log_file": log_files[0] if log_files else None
+        }
+        
+    except Exception as e:
+        print(f"Error running llm_ic_pddl: {e}")
+        return {
+            "success": False,
+            "exit_code": -1,
+            "error": str(e),
+            "log_data": None
+        }
+
+def extract_error_reason(log_data: dict, stdout: str, stderr: str) -> str:
+    """Extract the main error reason from the planning attempt"""
+    error_reasons = []
+    
+    # Check planner output for common errors
+    if log_data:
+        planner_output = log_data.get("planner_output", "")
+        if "Missing ')'" in planner_output:
+            error_reasons.append("Missing closing parenthesis")
+        if "Tokens remaining after parsing" in planner_output:
+            error_reasons.append("Extra text after PDDL")
+        if "exit code: 31" in planner_output:
+            error_reasons.append("PDDL syntax error")
+        if "exit code: 37" in planner_output:
+            error_reasons.append("Unsolvable problem")
+            
+        # Check for zero-step plan
+        if log_data.get("plan_found") and "Plan length: 0 step(s)" in planner_output:
+            error_reasons.append("Goal already satisfied")
+    
+    # Check stdout/stderr
+    if "Missing ')'" in stdout or "Missing ')'" in stderr:
+        error_reasons.append("Missing closing parenthesis")
+    if "Tokens remaining" in stdout or "Tokens remaining" in stderr:
+        error_reasons.append("Extra text after PDDL")
+    
+    return " | ".join(error_reasons) if error_reasons else "Unknown error"
+
+def query_rag_for_solution(error_reason: str, vectorstore: PineconeVectorStore) -> str:
+    """Query the RAG knowledge base for solutions to the error"""
+    print(f"Querying RAG knowledge base for: {error_reason}")
+    
+    try:
+        # Search for relevant knowledge
+        retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+        retrieved_docs = retriever.get_relevant_documents(error_reason)
+        
+        print(f"Found {len(retrieved_docs)} relevant knowledge entries")
+        
+        # Extract actions/solutions from retrieved docs
+        context = ""
+        for i, doc in enumerate(retrieved_docs):
+            print(f"Retrieved knowledge {i+1}: {doc.page_content}")
+            context += f"Knowledge {i+1}: {doc.page_content}\n\n"
+        
+        return context if context.strip() else "No specific knowledge found"
+        
+    except Exception as e:
+        print(f"Error querying RAG: {e}")
+        return "Error accessing knowledge base"
+
+def regenerate_problem_with_cohere(original_problem: str, domain_content: str, error_reason: str, rag_context: str, task_id: int) -> str:
+    """Use Cohere LLM to regenerate the problem file based on RAG knowledge"""
+    print("Regenerating problem file using Cohere LLM...")
+    
+    try:
+        cohere_client = cohere.Client(api_key=COHERE_API_KEY)
+        
+        prompt = f"""You are a PDDL (Planning Domain Definition Language) expert. I need you to fix a PDDL problem file that has errors.
+
+DOMAIN CONTENT:
+{domain_content[:2000]}
+
+ORIGINAL PROBLEM (WITH ERRORS):
+{original_problem}
+
+ERROR DETECTED: {error_reason}
+
+KNOWLEDGE FROM RAG DATABASE:
+{rag_context}
+
+TASK: Please regenerate the PROBLEM file only, ensuring:
+1. Proper parentheses matching (every '(' has a corresponding ')')
+2. No extra text after the final closing parenthesis
+3. Valid PDDL syntax
+4. Keep the same problem structure and goals
+
+IMPORTANT: Return ONLY the corrected PROBLEM PDDL content, starting with (define and ending with the final ). Do not include any explanations or extra text.
+
+CORRECTED PROBLEM:"""
+
+        response = cohere_client.chat(
+            model="command-r-plus",
+            message=prompt,
+            temperature=0.1,  # Low temperature for consistent fixes
+            max_tokens=1500,
+            p=0.95
+        )
+        
+        corrected_problem = response.text.strip()
+        
+        # Basic validation - ensure it starts and ends correctly
+        if not corrected_problem.startswith("(define"):
+            print("Warning: Generated problem doesn't start with (define")
+        if not corrected_problem.endswith(")"):
+            print("Warning: Generated problem doesn't end with )")
+            
+        print("Problem regenerated successfully")
+        return corrected_problem
+        
+    except Exception as e:
+        print(f"Error regenerating problem with Cohere: {e}")
+        return original_problem  # Return original if regeneration fails
+
+def llm_ic_pddl_rag(args, planner, domain):
+    """Main RAG-enhanced PDDL planning function"""
+    task_id = args.task
+    run = args.run
+    time_limit = args.time_limit
+    
+    print(f"\n{'='*60}")
+    print(f"STARTING LLM_IC_PDDL_RAG for Task {task_id}, Run {run}")
+    print('='*60)
+    
+    # Step 1: Run original llm_ic_pddl
+    print("\nStep 1: Running original llm_ic_pddl...")
+    initial_result = run_llm_ic_pddl_internal(task_id, run, time_limit)
+    
+    if initial_result["success"]:
+        print("✅ Initial planning succeeded! No RAG intervention needed.")
+        return initial_result
+    
+    print("❌ Initial planning failed. Proceeding with RAG enhancement...")
+    
+    # Step 2: Extract error reason
+    print("\nStep 2: Analyzing error...")
+    error_reason = extract_error_reason(
+        initial_result.get("log_data"),
+        initial_result.get("stdout", ""),
+        initial_result.get("stderr", "")
+    )
+    print(f"Error reason: {error_reason}")
+    
+    # Step 3: Load existing vectorstore (assume it exists)
+    print("\nStep 3: Connecting to RAG knowledge base...")
+    try:
+        embeddings = CohereEmbeddings(model="embed-english-v3.0")
+        vectorstore = PineconeVectorStore(
+            index_name=PINECONE_INDEX_NAME,
+            embedding=embeddings
+        )
+        print("✅ Connected to RAG knowledge base")
+    except Exception as e:
+        print(f"❌ Failed to connect to RAG knowledge base: {e}")
+        return initial_result
+    
+    # Step 4: Query RAG for solution
+    print("\nStep 4: Querying RAG knowledge base...")
+    rag_context = query_rag_for_solution(error_reason, vectorstore)
+    
+    # Step 5: Get original files for regeneration
+    print("\nStep 5: Loading original PDDL files...")
+    log_data = initial_result.get("log_data")
+    if not log_data:
+        print("❌ No log data available for regeneration")
+        return initial_result
+    
+    original_problem = log_data.get("generated_problem_pddl", "")
+    domain_content = log_data.get("generated_domain_pddl", "")
+    
+    if not original_problem:
+        print("❌ No problem PDDL found in logs")
+        return initial_result
+    
+    # Step 6: Regenerate problem file using Cohere
+    print("\nStep 6: Regenerating problem file with Cohere LLM...")
+    corrected_problem = regenerate_problem_with_cohere(
+        original_problem, domain_content, error_reason, rag_context, task_id
+    )
+    
+    # Step 7: Save the corrected files
+    print("\nStep 7: Saving corrected problem and domain files...")
+    try:
+        # Create RAG-specific directory
+        rag_dir = f"experiments/run{run}/problems/llm_ic_pddl_rag/blocksworld"
+        os.makedirs(rag_dir, exist_ok=True)
+        
+        # Save corrected problem file
+        problem_filename = f"p{task_id+1}_rag.pddl"  # +1 because tasks are 0-indexed
+        problem_path = os.path.join(rag_dir, problem_filename).replace('\\', '/')
+        
+        with open(problem_path, 'w', encoding='utf-8') as f:
+            f.write(corrected_problem)
+        
+        print(f"✅ Corrected problem saved to: {problem_path}")
+        
+        # Save the domain file for reference
+        domain_filename = f"p{task_id+1}_domain_rag.pddl"
+        domain_path = os.path.join(rag_dir, domain_filename).replace('\\', '/')
+        
+        with open(domain_path, 'w', encoding='utf-8') as f:
+            f.write(domain_content)
+        
+        print(f"✅ Domain file saved to: {domain_path}")
+        
+        # Create summary of RAG intervention
+        rag_summary = {
+            "task_id": task_id,
+            "run": run,
+            "initial_success": False,
+            "error_reason": error_reason,
+            "rag_context": rag_context,
+            "corrected_files": {
+                "problem": problem_path,
+                "domain": domain_path
+            },
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        # Save RAG summary
+        summary_path = os.path.join(rag_dir, f"task_{task_id}_rag_summary.json")
+        with open(summary_path, 'w', encoding='utf-8') as f:
+            json.dump(rag_summary, f, indent=2)
+        
+        print(f"✅ RAG summary saved to: {summary_path}")
+        
+        print(f"\n{'='*60}")
+        print("RAG INTERVENTION COMPLETED")
+        print(f"Task {task_id} problem file regenerated and saved.")
+        print(f"Corrected files:")
+        print(f"  Problem: {problem_path}")
+        print(f"  Domain: {domain_path}")
+        print('='*60)
+        
+        return {
+            "success": True,
+            "rag_applied": True,
+            "corrected_files": rag_summary["corrected_files"],
+            "error_reason": error_reason,
+            "rag_context": rag_context,
+            "initial_result": initial_result
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in RAG process: {e}")
+        return initial_result
+
 def llm_ic_pddl_planner(args, planner, domain):
     """
     Our method:
@@ -653,6 +952,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LLM-Planner")
     parser.add_argument('--domain', type=str, choices=["blocksworld"], default="blocksworld")
     parser.add_argument('--method', type=str, choices=["llm_ic_pddl_planner",
+                                                       "llm_ic_pddl_rag",
                                                        "llm_pddl_planner",
                                                        "llm_planner",
                                                        "llm_ic_planner"],
@@ -672,6 +972,7 @@ if __name__ == "__main__":
     # 3. execute the llm planner
     method = {
         "llm_ic_pddl_planner" : llm_ic_pddl_planner,
+        "llm_ic_pddl_rag" : llm_ic_pddl_rag,
         "llm_pddl_planner" : llm_pddl_planner,
         "llm_planner" : llm_planner,
         "llm_ic_planner" : llm_ic_planner
