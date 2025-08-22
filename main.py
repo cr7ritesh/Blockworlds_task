@@ -5,22 +5,19 @@ import time
 import backoff
 import subprocess
 import json
-import re
 from dotenv import load_dotenv
-from pinecone import ServerlessSpec, Pinecone as pc
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_cohere import CohereEmbeddings
-from langchain_pinecone import PineconeVectorStore
-from langchain_core.documents import Document
+from graph_rag_qa import PDDLGraphRAGQA
+from knowledge_graph_qa import PDDLKnowledgeGraphQA
 
 import cohere
 
 load_dotenv()
 
-# Pinecone RAG Configuration
+# Knowledge Graph RAG Configuration
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-PINECONE_INDEX_NAME = "rag-knowledge"
+NEO4J_URI = os.getenv("NEO4J_URI", "neo4j://localhost:7687")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")  
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
 
 # FAST_DOWNWARD_ALIAS = "lama"
 # FAST_DOWNWARD_ALIAS = "seq-opt-fdss-1"
@@ -422,32 +419,63 @@ def extract_error_reason(log_data: dict, stdout: str, stderr: str) -> str:
     
     return " | ".join(error_reasons) if error_reasons else "Unknown error"
 
-def query_rag_for_solution(error_reason: str, vectorstore: PineconeVectorStore) -> str:
-    """Query the RAG knowledge base for solutions to the error"""
-    print(f"Querying RAG knowledge base for: {error_reason}")
+def query_knowledge_graph_for_solution(error_reason: str, graph_rag_qa: PDDLGraphRAGQA) -> str:
+    """Query the Knowledge Graph RAG for solutions to the error"""
+    print(f"Querying Knowledge Graph RAG for: {error_reason}")
     
     try:
-        # Search for relevant knowledge
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-        retrieved_docs = retriever.get_relevant_documents(error_reason)
+        # Formulate a question for the knowledge graph
+        question = f"How do I fix this PDDL error: {error_reason}? What are the common causes and solutions?"
         
-        print(f"Found {len(retrieved_docs)} relevant knowledge entries")
+        # Query the graph RAG system
+        response = graph_rag_qa.answer_question(question)
         
-        # Extract actions/solutions from retrieved docs
-        context = ""
-        for i, doc in enumerate(retrieved_docs):
-            print(f"Retrieved knowledge {i+1}: {doc.page_content}")
-            context += f"Knowledge {i+1}: {doc.page_content}\n\n"
+        answer = response.get('answer', 'No specific knowledge found')
+        context = response.get('context', [])
+        confidence = response.get('confidence', 0.0)
         
-        return context if context.strip() else "No specific knowledge found"
+        print(f"Knowledge Graph Response (confidence: {confidence:.2f}):")
+        print(f"Answer: {answer}")
+        
+        if context:
+            print(f"Retrieved {len(context)} relevant knowledge entries from graph:")
+            for i, ctx in enumerate(context):
+                print(f"  {i+1}. {ctx.get('name', 'Unknown')}: {ctx.get('description', 'No description')[:100]}...")
+        
+        # If confidence is very low or no specific context, provide fallback guidance
+        if confidence < 0.3 or not context:
+            fallback_guidance = get_fallback_error_guidance(error_reason)
+            print("Low confidence from Knowledge Graph, using fallback guidance")
+            return f"{answer}\n\nFallback guidance: {fallback_guidance}"
+        
+        return answer
         
     except Exception as e:
-        print(f"Error querying RAG: {e}")
-        return "Error accessing knowledge base"
+        print(f"Error querying Knowledge Graph RAG: {e}")
+        fallback_guidance = get_fallback_error_guidance(error_reason)
+        return f"Error accessing knowledge graph: {str(e)}\n\nFallback guidance: {fallback_guidance}"
 
-def regenerate_problem_with_cohere(original_problem: str, domain_content: str, error_reason: str, rag_context: str, task_id: int) -> str:
-    """Use Cohere LLM to regenerate the problem file based on RAG knowledge"""
-    print("Regenerating problem file using Cohere LLM...")
+def get_fallback_error_guidance(error_reason: str) -> str:
+    """Provide fallback guidance when Knowledge Graph is unavailable or has low confidence"""
+    guidance_map = {
+        "Missing closing parenthesis": "Check for parentheses matching. Count opening '(' and closing ')' parentheses. Add missing closing parentheses at the end of the PDDL file.",
+        "PDDL syntax error": "Verify PDDL syntax. Check parentheses matching, ensure proper structure, and remove any extra text after the final closing parenthesis.",
+        "Extra text after PDDL": "Remove any text after the final closing parenthesis. The PDDL file should end with ')' or '))'.",
+        "Unsolvable problem": "Verify goal conditions are achievable with available actions and initial state. Check if all goal predicates can be satisfied.",
+        "No operators": "Check action definitions have valid preconditions and effects. Ensure actions are properly defined in the domain.",
+    }
+    
+    # Try to match error reason to guidance
+    for key, guidance in guidance_map.items():
+        if key.lower() in error_reason.lower():
+            return guidance
+    
+    # Default guidance
+    return "Check PDDL syntax, verify parentheses matching, ensure proper file structure, and validate that goals are achievable with available actions."
+
+def regenerate_problem_with_cohere_and_graph(original_problem: str, domain_content: str, error_reason: str, graph_rag_context: str, task_id: int) -> str:
+    """Use Cohere LLM to regenerate the problem file based on Knowledge Graph RAG context"""
+    print("Regenerating problem file using Cohere LLM with Knowledge Graph context...")
     
     try:
         cohere_client = cohere.Client(api_key=COHERE_API_KEY)
@@ -462,14 +490,16 @@ ORIGINAL PROBLEM (WITH ERRORS):
 
 ERROR DETECTED: {error_reason}
 
-KNOWLEDGE FROM RAG DATABASE:
-{rag_context}
+KNOWLEDGE FROM GRAPH RAG SYSTEM:
+{graph_rag_context}
 
 TASK: Please regenerate the PROBLEM file only, ensuring:
-1. Proper parentheses matching (every '(' has a corresponding ')')
-2. No extra text after the final closing parenthesis
-3. Valid PDDL syntax
-4. Keep the same problem structure and goals
+1. Apply the specific fixes suggested by the knowledge graph
+2. Proper parentheses matching (every '(' has a corresponding ')')
+3. No extra text after the final closing parenthesis
+4. Valid PDDL syntax according to the knowledge graph guidance
+5. Keep the same problem structure and goals
+6. Address all the error causes mentioned in the knowledge graph context
 
 IMPORTANT: Return ONLY the corrected PROBLEM PDDL content, starting with (define and ending with the final ). Do not include any explanations or extra text.
 
@@ -491,11 +521,11 @@ CORRECTED PROBLEM:"""
         if not corrected_problem.endswith(")"):
             print("Warning: Generated problem doesn't end with )")
             
-        print("Problem regenerated successfully")
+        print("Problem regenerated successfully with Knowledge Graph guidance")
         return corrected_problem
         
     except Exception as e:
-        print(f"Error regenerating problem with Cohere: {e}")
+        print(f"Error regenerating problem with Cohere and Knowledge Graph: {e}")
         return original_problem  # Return original if regeneration fails
 
 def llm_ic_pddl_rag(args, planner, domain):
@@ -527,22 +557,29 @@ def llm_ic_pddl_rag(args, planner, domain):
     )
     print(f"Error reason: {error_reason}")
     
-    # Step 3: Load existing vectorstore (assume it exists)
-    print("\nStep 3: Connecting to RAG knowledge base...")
+    # Step 3: Initialize Knowledge Graph RAG system
+    print("\nStep 3: Initializing Knowledge Graph RAG system...")
     try:
-        embeddings = CohereEmbeddings(model="embed-english-v3.0")
-        vectorstore = PineconeVectorStore(
-            index_name=PINECONE_INDEX_NAME,
-            embedding=embeddings
+        # Initialize the knowledge graph
+        kg = PDDLKnowledgeGraphQA(
+            uri=NEO4J_URI,
+            username=NEO4J_USERNAME, 
+            password=NEO4J_PASSWORD,
+            cohere_api_key=COHERE_API_KEY
         )
-        print("✅ Connected to RAG knowledge base")
+        
+        # Initialize the Graph RAG QA system
+        graph_rag_qa = PDDLGraphRAGQA(kg, COHERE_API_KEY)
+        
+        print("✅ Knowledge Graph RAG system initialized")
     except Exception as e:
-        print(f"❌ Failed to connect to RAG knowledge base: {e}")
+        print(f"❌ Failed to initialize Knowledge Graph RAG: {e}")
+        print("Proceeding without RAG enhancement...")
         return initial_result
     
-    # Step 4: Query RAG for solution
-    print("\nStep 4: Querying RAG knowledge base...")
-    rag_context = query_rag_for_solution(error_reason, vectorstore)
+    # Step 4: Query Knowledge Graph RAG for solution
+    print("\nStep 4: Querying Knowledge Graph RAG system...")
+    rag_context = query_knowledge_graph_for_solution(error_reason, graph_rag_qa)
     
     # Step 5: Get original files for regeneration
     print("\nStep 5: Loading original PDDL files...")
@@ -558,9 +595,9 @@ def llm_ic_pddl_rag(args, planner, domain):
         print("❌ No problem PDDL found in logs")
         return initial_result
     
-    # Step 6: Regenerate problem file using Cohere
-    print("\nStep 6: Regenerating problem file with Cohere LLM...")
-    corrected_problem = regenerate_problem_with_cohere(
+    # Step 6: Regenerate problem file using Cohere with Knowledge Graph context
+    print("\nStep 6: Regenerating problem file with Cohere LLM and Knowledge Graph guidance...")
+    corrected_problem = regenerate_problem_with_cohere_and_graph(
         original_problem, domain_content, error_reason, rag_context, task_id
     )
     
@@ -589,13 +626,14 @@ def llm_ic_pddl_rag(args, planner, domain):
         
         print(f"✅ Domain file saved to: {domain_path}")
         
-        # Create summary of RAG intervention
+        # Create summary of Knowledge Graph RAG intervention
         rag_summary = {
             "task_id": task_id,
             "run": run,
             "initial_success": False,
             "error_reason": error_reason,
-            "rag_context": rag_context,
+            "knowledge_graph_context": rag_context,
+            "rag_type": "Knowledge Graph RAG",
             "corrected_files": {
                 "problem": problem_path,
                 "domain": domain_path
@@ -611,7 +649,7 @@ def llm_ic_pddl_rag(args, planner, domain):
         print(f"✅ RAG summary saved to: {summary_path}")
         
         print(f"\n{'='*60}")
-        print("RAG INTERVENTION COMPLETED")
+        print("KNOWLEDGE GRAPH RAG INTERVENTION COMPLETED")
         print(f"Task {task_id} problem file regenerated and saved.")
         print(f"Corrected files:")
         print(f"  Problem: {problem_path}")
@@ -620,10 +658,10 @@ def llm_ic_pddl_rag(args, planner, domain):
         
         return {
             "success": True,
-            "rag_applied": True,
+            "knowledge_graph_rag_applied": True,
             "corrected_files": rag_summary["corrected_files"],
             "error_reason": error_reason,
-            "rag_context": rag_context,
+            "knowledge_graph_context": rag_context,
             "initial_result": initial_result
         }
         

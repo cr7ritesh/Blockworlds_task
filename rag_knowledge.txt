@@ -1,3 +1,0 @@
-ERROR: Missing ')'
-exit code: 31
-ACTION: Check for paranthesis matching, add missing paranthesis and regenerate problem file
