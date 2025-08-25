@@ -2,6 +2,7 @@
 Simplified Knowledge Graph for PDDL QA Bot
 """
 import logging
+import time
 from typing import List, Dict, Any
 from neo4j import GraphDatabase
 from langchain_cohere import CohereEmbeddings
@@ -19,7 +20,20 @@ class PDDLKnowledgeGraphQA:
             model="embed-english-v3.0",
             cohere_api_key=cohere_api_key
         )
+        self.last_api_call = 0  # Track last API call for rate limiting
         self._create_constraints_and_indices()
+    
+    def _rate_limit_delay(self):
+        """Add delay to respect Cohere API rate limits (40 calls/minute for trial)"""
+        current_time = time.time()
+        time_since_last = current_time - self.last_api_call
+        min_interval = 1.8  # ~33 calls per minute to stay under 40/min
+        
+        if time_since_last < min_interval:
+            sleep_time = min_interval - time_since_last
+            time.sleep(sleep_time)
+        
+        self.last_api_call = time.time()
         
     def _create_constraints_and_indices(self):
         """Create necessary constraints and indices"""
@@ -56,6 +70,7 @@ class PDDLKnowledgeGraphQA:
         with self.driver.session() as session:
             # Create domain node with embedding
             domain_text = f"{domain_data.name} {domain_data.description}"
+            self._rate_limit_delay()  # Add rate limiting delay
             embedding = self.embeddings.embed_query(domain_text)
             
             session.run("""
@@ -83,6 +98,7 @@ class PDDLKnowledgeGraphQA:
         with self.driver.session() as session:
             # Create action text for embedding
             action_text = f"{action_data.name} {action_data.description} {' '.join(action_data.parameters)}"
+            self._rate_limit_delay()  # Add rate limiting delay
             embedding = self.embeddings.embed_query(action_text)
             
             session.run("""
@@ -113,6 +129,7 @@ class PDDLKnowledgeGraphQA:
         with self.driver.session() as session:
             # Create predicate text for embedding
             pred_text = f"{predicate_data.name} {predicate_data.description} {' '.join(predicate_data.parameters)}"
+            self._rate_limit_delay()  # Add rate limiting delay
             embedding = self.embeddings.embed_query(pred_text)
             
             session.run("""

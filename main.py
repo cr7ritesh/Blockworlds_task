@@ -8,6 +8,7 @@ import json
 from dotenv import load_dotenv
 from graph_rag_qa import PDDLGraphRAGQA
 from knowledge_graph_qa import PDDLKnowledgeGraphQA
+from kg_initializer import PDDLKnowledgeGraphInitializer
 
 import cohere
 
@@ -528,7 +529,7 @@ CORRECTED PROBLEM:"""
         print(f"Error regenerating problem with Cohere and Knowledge Graph: {e}")
         return original_problem  # Return original if regeneration fails
 
-def llm_ic_pddl_rag(args, planner, domain):
+def llm_ic_pddl_rag(args, _, domain):
     """Main RAG-enhanced PDDL planning function"""
     task_id = args.task
     run = args.run
@@ -560,13 +561,14 @@ def llm_ic_pddl_rag(args, planner, domain):
     # Step 3: Initialize Knowledge Graph RAG system
     print("\nStep 3: Initializing Knowledge Graph RAG system...")
     try:
-        # Initialize the knowledge graph
-        kg = PDDLKnowledgeGraphQA(
-            uri=NEO4J_URI,
-            username=NEO4J_USERNAME, 
-            password=NEO4J_PASSWORD,
-            cohere_api_key=COHERE_API_KEY
-        )
+        # Use the dedicated initializer to get the knowledge graph
+        kg_initializer = PDDLKnowledgeGraphInitializer()
+        
+        if not kg_initializer.initialize_knowledge_graph():
+            raise Exception("Failed to initialize knowledge graph")
+        
+        # Get the initialized knowledge graph instance
+        kg = kg_initializer.get_knowledge_graph_instance()
         
         # Initialize the Graph RAG QA system
         graph_rag_qa = PDDLGraphRAGQA(kg, COHERE_API_KEY)
