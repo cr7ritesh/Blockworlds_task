@@ -32,7 +32,7 @@ class PDDLGraphRAGQA:
         self.kg = knowledge_graph
         self.cohere_api_key = cohere_api_key
         
-        # Initialize Cohere chat model
+        # Initialize Cohere chat model (keeping Cohere for chat)
         self.chat_model = init_chat_model(
             "command-r-plus", 
             model_provider="cohere", 
@@ -182,17 +182,18 @@ class PDDLGraphRAGQA:
             context_text = "\n\n".join(context_parts)
             
             # Create prompt
-            prompt = f"""You are an expert PDDL (Planning Domain Definition Language) assistant. Answer the following question using the provided context from the PDDL knowledge base.
+            prompt = f"""You are an expert PDDL (Planning Domain Definition Language) and ALFWORLD assistant. Answer the following question using the provided context from the knowledge base.
 
 Question: {question}
 
-Context from PDDL Knowledge Base:
+Context from Knowledge Base:
 {context_text}
 
 Instructions:
-- Provide a clear, helpful answer about PDDL concepts
+- Provide a clear, helpful answer about PDDL concepts and ALFWORLD tasks
 - Use the context information to support your answer
-- If the question is about specific domains (blocks, gripper, logistics), reference them
+- If the question is about specific domains (blocks, gripper, logistics, alfred), reference them
+- For ALFWORLD tasks, explain how initial states can be inferred from trajectory data
 - Include practical examples when helpful
 - Be concise but informative
 
@@ -230,5 +231,9 @@ Answer:"""
             "How do I define actions in a planning domain?",
             "What is the gripper domain used for?",
             "How do I specify object types in PDDL?",
-            "What are the main components of a PDDL domain file?"
+            "What are the main components of a PDDL domain file?",
+            "How does ALFWORLD relate to PDDL planning?",
+            "What is the look_at_obj_in_light task in ALFWORLD?",
+            "How can I infer initial state from ALFWORLD trajectory data?",
+            "What objects and actions are available in the Alfred domain?"
         ]
