@@ -7,7 +7,6 @@ import subprocess
 import json
 from dotenv import load_dotenv
 from graph_rag_qa import PDDLGraphRAGQA
-from knowledge_graph_qa import PDDLKnowledgeGraphQA
 from kg_initializer import PDDLKnowledgeGraphInitializer
 
 import cohere
