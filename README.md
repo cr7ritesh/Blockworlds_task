@@ -1,59 +1,95 @@
-# LLM+P code
-This repo contains the source code for making plans based on problems decribed by natural language.
+# LLM PDDL Framework
 
-## Dependency
+A research framework for evaluating Large Language Model performance on PDDL (Planning Domain Definition Language) planning problems using knowledge graphs and RAG (Retrieval-Augmented Generation) techniques.
 
-1. Install Cohere library. Put Cohere API key under the ```.env``` file.
-2. Install fast-download.
+## Overview
 
-## Running Code
-To run a for a specific task in a specific domain using a specific method:
-```
-python main.py --domain DOMAIN --method METHOD --task TASK_ID
-```
-`DOMAIN` is selected from
-```[blocksworld]```
+This framework implements multiple approaches for solving planning problems:
 
-`METHOD` is selected from
-```[llm_ic_pddl_planner, llm_pddl_planner, llm_planner, llm_ic_planner]```
+- **LLM-as-Planner**: Direct text-based planning
+- **LLM-IC**: In-context learning with examples  
+- **LLM-PDDL**: PDDL code generation
+- **LLM-IC-PDDL**: PDDL generation with context
+- **LLM-IC-PDDL-RAG**: Enhanced with knowledge graph RAG for error correction
 
-Alternatively, you can just use:
+## Project Structure
 
 ```
-bash run.sh DOMAIN METHOD TASK_ID
+├── main.py                    # Main execution script
+├── kg_initializer.py          # Knowledge graph initialization
+├── knowledge_graph_qa.py      # Knowledge graph QA system
+├── graph_rag_qa.py           # Graph RAG implementation
+├── domains/                   # PDDL domain definitions
+│   ├── blocksworld/          # Blocksworld domain and problems
+│   └── grippers/             # Gripper domain and problems
+├── data/                     # Additional domain data
+│   ├── blocksworld/
+│   ├── gripper/
+├── experiments/              # Experiment results
+└── logs/                     # Execution logs
 ```
 
+## Setup
 
-## The File Hierarchy:
+1. **Environment Variables**
+   Create a `.env` file with:
+   ```
+   COHERE_API_KEY=your_cohere_api_key
+   NEO4J_URI=neo4j://localhost:7687
+   NEO4J_USERNAME=neo4j
+   NEO4J_PASSWORD=your_password
+   NEO4J_DATABASE=neo4j
+   HUGGINGFACE_TOKEN=your_hf_token
+   ```
+
+2. **Dependencies**
+   - Python 3.8+
+   - Cohere API
+   - Neo4j Database
+   - Fast Downward Planner
+   - Required Python packages (cohere, neo4j, python-dotenv, etc.)
+
+## Usage
+
+### Basic Planning
+```bash
+python main.py --method llm_ic_pddl_planner --task 0 --run 1
 ```
-llm-pddl
- └─main.py                         (the main python script)
- └─.env                            (you should place your cohere key here)
- └─domains                         (the generated domain files)
-    └─ blocksworld
-        └─ description_geneator.py (generating natural language description)
-        └─ p_example.nl            (example natural language)
-        └─ p_example.pddl          (example problem pddl file)
-        └─ domain.pddl             (the shared domain.pddl file for all problems)
-        └─ xxx.nl                  (task natural language description)
-        └─ xxx.pddl                (ground-truth problem pddl, might not be used)
- └─experiments
-   └─problems                        (the generated problem pddl files)
-      └─ llm                         (empty, since llm -> plan does not generate pddl)
-      └─ llm_ic                      (empty, since llm + context -> plan does not generate pddl)    
-      └─ llm_pddl                    (baseline 2: llm -> p.pddl)
-      └─ llm_ic_pddl                 (ours: llm + context -> p.pddl)
-         └─ blocksworld
-   └─plans                           (the tmp folder for storing raw solutions found by fast-downward)
-      └─ llm                         (empty, since llm -> plan does not generate raw plans)
-      └─ llm_ic                      (empty, since llm + context -> plan does not generate raw plans)
-      └─ llm_pddl                    (baseline 2: llm -> p.pddl)
-      └─ llm_ic_pddl                 (ours: llm + context -> p.pddl)
-         └─ blocksworld
-   └─results                         (the final plan in natural language)
-      └─ llm                         (baseline 1: llm -> plan)
-      └─ llm_ic                      (baseline 3: llm + context -> plan)
-      └─ llm_pddl                    (baseline 2: llm -> p.pddl)
-      └─ llm_ic_pddl                 (ours: llm + context -> p.pddl)
-         └─ blocksworld
- ```
+
+### RAG-Enhanced Planning
+```bash
+python main.py --method llm_ic_pddl_rag --task 0 --run 1
+```
+
+### Initialize Knowledge Graph
+```bash
+python kg_initializer.py
+```
+
+## Methods
+
+- `llm_planner`: Direct LLM text planning
+- `llm_ic_planner`: In-context text planning
+- `llm_pddl_planner`: PDDL generation without context
+- `llm_ic_pddl_planner`: PDDL generation with context
+- `llm_ic_pddl_rag`: RAG-enhanced PDDL error correction
+
+## Features
+
+- **Knowledge Graph Integration**: Neo4j-based storage of domain knowledge and error patterns
+- **Error Classification**: Automatic PDDL error detection and categorization
+- **RAG-Based Correction**: Retrieval-augmented generation for fixing planning failures
+- **Comprehensive Logging**: Detailed execution tracking and result analysis
+- **Multiple Domains**: Support for blocksworld, grippers, and logistics domains
+
+## Research Focus
+
+This framework enables research on:
+- LLM performance in symbolic planning
+- Knowledge graph-enhanced reasoning
+- Error correction through retrieval-augmented generation
+- Comparative analysis of different planning approaches
+
+## Output
+
+Results are organized in `experiments/` with generated PDDL files, plans, and detailed logs for analysis and evaluation.

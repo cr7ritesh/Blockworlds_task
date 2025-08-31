@@ -13,7 +13,6 @@ import time
 from typing import List, Dict, Any, NamedTuple
 from dotenv import load_dotenv
 from knowledge_graph_qa import PDDLKnowledgeGraphQA
-import math
 
 # Load environment variables
 load_dotenv()
