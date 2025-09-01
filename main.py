@@ -23,76 +23,6 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
 # FAST_DOWNWARD_ALIAS = "seq-opt-fdss-1"
 FAST_DOWNWARD_ALIAS = "seq-opt-lmcut"  # Default alias for Fast Downward planner
 
-class Logger:
-    """Logger class to capture and store logs for RAG documentation"""
-    
-    def __init__(self, log_dir, task_id, method_name):
-        self.log_dir = log_dir
-        self.task_id = task_id
-        self.method_name = method_name
-        
-        # Create log directory
-        os.makedirs(log_dir, exist_ok=True)
-        
-        # Initialize log data structure
-        self.log_data = {
-            "task_id": task_id,
-            "method": method_name,
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "prompt": "",
-            "llm_response": "",
-            "generated_domain_pddl": "",
-            "generated_problem_pddl": "",
-            "planner_command": "",
-            "planner_output": "",
-            "planner_errors": "",
-            "planner_exit_code": None,
-            "execution_time": 0,
-            "plan_found": False,
-            "plan_cost": None,
-            "best_plan": ""
-        }
-    
-    def log_prompt(self, prompt):
-        """Log the prompt sent to LLM"""
-        self.log_data["prompt"] = prompt
-        
-    def log_llm_response(self, response):
-        """Log the raw LLM response"""
-        self.log_data["llm_response"] = response
-        
-    def log_generated_pddl(self, domain_pddl, problem_pddl):
-        """Log the generated PDDL files"""
-        self.log_data["generated_domain_pddl"] = domain_pddl
-        self.log_data["generated_problem_pddl"] = problem_pddl
-        
-    def log_planner_execution(self, command, output, errors, exit_code):
-        """Log planner command execution details"""
-        self.log_data["planner_command"] = command
-        self.log_data["planner_output"] = output
-        self.log_data["planner_errors"] = errors
-        self.log_data["planner_exit_code"] = exit_code
-        
-    def log_plan_result(self, plan_found, plan_cost=None, best_plan=""):
-        """Log the final planning result"""
-        self.log_data["plan_found"] = plan_found
-        self.log_data["plan_cost"] = plan_cost
-        self.log_data["best_plan"] = best_plan
-        
-    def log_execution_time(self, execution_time):
-        """Log total execution time"""
-        self.log_data["execution_time"] = execution_time
-        
-    def save_logs(self):
-        """Save logs to a single JSON file"""
-        # Create filename: task_<id>_<method>.json
-        json_filename = f"task_{self.task_id}_{self.method_name}.json"
-        json_file = os.path.join(self.log_dir, json_filename)
-        
-        with open(json_file, "w", encoding="utf-8") as f:
-            json.dump(self.log_data, f, indent=2, ensure_ascii=False)
-        
-        print(f"[LOG] Logs saved to {json_file}")
 
 def get_cost(x):
     splitted = x.split()
@@ -206,6 +136,75 @@ class Blocksworld:
 
     def get_domain_nl_file(self):return f"./domains/blocksworld/domain.nl"
 
+
+class Gripper:
+    def __init__(self):
+        self.name = 'gripper'
+        self.context = ("p_example.nl", "p_example.pddl", "p_example.sol")
+        self.tasks = []
+
+        self.grab_tasks()
+
+    def grab_tasks(self):
+        path = f"./domains/{self.name}"
+        nls = []
+        for fn in glob.glob(f"{path}/*.nl"):
+            fn_ = os.path.basename(fn)
+            if "domain" not in fn_ and "p_example" not in fn_:
+                if os.path.exists(fn.replace("nl", "pddl")):
+                    nls.append(fn_)
+        sorted_nls = sorted(nls)
+        self.tasks = [(nl, nl.replace("nl", "pddl")) for nl in sorted_nls]
+
+    def __len__(self):return len(self.tasks)
+
+    def get_task_suffix(self, i):
+        _, pddl = self.tasks[i]
+        return f"{self.name}/{pddl}"
+
+    def get_task_file(self, i):
+        nl, pddl = self.tasks[i]
+        return f"./domains/{self.name}/{nl}", f"./domains/{self.name}/{pddl}"
+
+    def get_task(self, i):
+        nl_f, pddl_f = self.get_task_file(i)
+        
+        with open(nl_f, 'r') as f:nl = f.read()
+        with open(pddl_f, 'r') as f:pddl = f.read()
+        
+        return nl.strip(), pddl.strip()
+
+    def get_context(self):
+        nl_f = f"./domains/{self.name}/{self.context[0]}"
+        pddl_f = f"./domains/{self.name}/{self.context[1]}"
+        sol_f = f"./domains/{self.name}/{self.context[2]}"
+        
+        with open(nl_f, 'r') as f:nl = f.read()
+        with open(pddl_f, 'r') as f:pddl = f.read()
+        with open(sol_f, 'r') as f:sol = f.read()
+        
+        return nl.strip(), pddl.strip(), sol.strip()
+
+    def get_domain_pddl(self):
+        domain_pddl_f = self.get_domain_pddl_file()
+        
+        with open(domain_pddl_f, 'r') as f:domain_pddl = f.read()
+        
+        return domain_pddl.strip()
+
+    def get_domain_pddl_file(self):return f"./domains/gripper/domain.pddl"
+
+    def get_domain_nl(self):
+        domain_nl_f = self.get_domain_nl_file()
+        try:
+            with open(domain_nl_f, 'r') as f:
+                domain_nl = f.read()
+        except:
+            domain_nl = "Nothing"
+        return domain_nl.strip()
+
+    def get_domain_nl_file(self):return f"./domains/gripper/domain.nl"
+
 class Planner:
     def __init__(self):
         self.cohere_api_key = os.getenv("COHERE_API_KEY")
@@ -220,16 +219,17 @@ class Planner:
                  f"sequence of behaviors, to solve the problem?"
         return prompt
 
-    def create_llm_ic_prompt(self, task_nl, domain_nl, context):
+    def create_llm_ic_prompt(self, task_nl, domain_nl, context, domain_name="blocksworld"):
         # Baseline 2 (LLM-as-P with context): directly ask the LLM for plan
         context_nl, _, context_sol = context
+        domain_suffix = "-4ops" if domain_name == "blocksworld" else ""
         prompt = f"{domain_nl} \n" + \
                  f"An example planning problem is: \n {context_nl} \n" + \
                  f"A plan for the example problem is: \n {context_sol} \n" + \
                  f"Now I have a new planning problem and its description is: \n {task_nl} \n" + \
                  f"Can you provide an optimal plan, in the way of a " + \
                  f"sequence of behaviors, to solve the problem?" + \
-                 f"The domain name should be 'blocksworld-4ops'."
+                 f"The domain name should be '{domain_name}{domain_suffix}'."
         return prompt
 
     def create_llm_pddl_prompt(self, task_nl, domain_nl):
@@ -364,22 +364,24 @@ def run_llm_ic_pddl_internal(task_id: int, run: int, time_limit: int = 200):
         
         print(f"llm_ic_pddl completed with exit code: {exit_code}")
         
-        # Try to find the log file
-        log_pattern = f"./logs/run{run}/task_{task_id}_llm_ic_pddl*.json"
-        log_files = sorted(glob.glob(log_pattern), key=os.path.getmtime, reverse=True)
+        # Check for planning failures in the output, not just subprocess exit code
+        planning_failed = any([
+            "Planning failed" in stdout,
+            "no solution found" in stdout,
+            "Missing ')'" in stdout,
+            "translate exit code:" in stdout and "translate exit code: 0" not in stdout,
+            "Error: Could not parse" in stdout
+        ])
         
-        log_data = None
-        if log_files:
-            with open(log_files[0], 'r', encoding='utf-8') as f:
-                log_data = json.load(f)
+        print(f"Planning failed check: {planning_failed}")
+        if planning_failed:
+            print("Detected planning failure in output")
         
         return {
-            "success": exit_code == 0 and log_data and log_data.get("plan_found", False),
+            "success": exit_code == 0 and not planning_failed,
             "exit_code": exit_code,
             "stdout": stdout,
-            "stderr": stderr,
-            "log_data": log_data,
-            "log_file": log_files[0] if log_files else None
+            "stderr": stderr
         }
         
     except Exception as e:
@@ -391,31 +393,22 @@ def run_llm_ic_pddl_internal(task_id: int, run: int, time_limit: int = 200):
             "log_data": None
         }
 
-def extract_error_reason(log_data: dict, stdout: str, stderr: str) -> str:
+def extract_error_reason(stdout: str, stderr: str) -> str:
     """Extract the main error reason from the planning attempt"""
     error_reasons = []
     
-    # Check planner output for common errors
-    if log_data:
-        planner_output = log_data.get("planner_output", "")
-        if "Missing ')'" in planner_output:
-            error_reasons.append("Missing closing parenthesis")
-        if "Tokens remaining after parsing" in planner_output:
-            error_reasons.append("Extra text after PDDL")
-        if "exit code: 31" in planner_output:
-            error_reasons.append("PDDL syntax error")
-        if "exit code: 37" in planner_output:
-            error_reasons.append("Unsolvable problem")
-            
-        # Check for zero-step plan
-        if log_data.get("plan_found") and "Plan length: 0 step(s)" in planner_output:
-            error_reasons.append("Goal already satisfied")
-    
-    # Check stdout/stderr
-    if "Missing ')'" in stdout or "Missing ')'" in stderr:
+    # Check stdout/stderr for common errors
+    combined_output = stdout + stderr
+    if "Missing ')'" in combined_output:
         error_reasons.append("Missing closing parenthesis")
-    if "Tokens remaining" in stdout or "Tokens remaining" in stderr:
+    if "Tokens remaining" in combined_output:
         error_reasons.append("Extra text after PDDL")
+    if "exit code: 31" in combined_output:
+        error_reasons.append("PDDL syntax error")
+    if "exit code: 37" in combined_output:
+        error_reasons.append("Unsolvable problem")
+    if "Plan length: 0 step(s)" in combined_output:
+        error_reasons.append("Goal already satisfied")
     
     return " | ".join(error_reasons) if error_reasons else "Unknown error"
 
@@ -528,8 +521,8 @@ CORRECTED PROBLEM:"""
         print(f"Error regenerating problem with Cohere and Knowledge Graph: {e}")
         return original_problem  # Return original if regeneration fails
 
-def llm_ic_pddl_rag(args, _, domain):
-    """Main RAG-enhanced PDDL planning function"""
+def llm_ic_pddl_rag(args, planner, domain):
+    """Simplified RAG-enhanced PDDL planning function"""
     task_id = args.task
     run = args.run
     time_limit = args.time_limit
@@ -538,137 +531,167 @@ def llm_ic_pddl_rag(args, _, domain):
     print(f"STARTING LLM_IC_PDDL_RAG for Task {task_id}, Run {run}")
     print('='*60)
     
-    # Step 1: Run original llm_ic_pddl
-    print("\nStep 1: Running original llm_ic_pddl...")
-    initial_result = run_llm_ic_pddl_internal(task_id, run, time_limit)
+    # Step 1: Get the original problem file from llm_ic_pddl folder
+    print("\nStep 1: Loading original PDDL files from llm_ic_pddl folder...")
     
-    if initial_result["success"]:
-        print("✅ Initial planning succeeded! No RAG intervention needed.")
-        return initial_result
+    # Get the actual task file names from the domain
+    _, task_pddl_name = domain.tasks[task_id]
+    task_base_name = task_pddl_name.replace('.pddl', '')
     
-    print("❌ Initial planning failed. Proceeding with RAG enhancement...")
+    original_problem_path = f"experiments/run{run}/problems/llm_ic_pddl/{domain.name}/{task_pddl_name}"
+    original_domain_path = f"experiments/run{run}/problems/llm_ic_pddl/{domain.name}/{task_base_name}_domain.pddl"
     
-    # Step 2: Extract error reason
-    print("\nStep 2: Analyzing error...")
-    error_reason = extract_error_reason(
-        initial_result.get("log_data"),
-        initial_result.get("stdout", ""),
-        initial_result.get("stderr", "")
-    )
+    try:
+        with open(original_problem_path, 'r', encoding='utf-8') as f:
+            original_problem = f.read()
+        print(f"Loaded original problem: {original_problem_path}")
+    except FileNotFoundError:
+        print(f"Error: Could not find {original_problem_path}")
+        return {"success": False, "error": "Original problem file not found"}
+    
+    try:
+        with open(original_domain_path, 'r', encoding='utf-8') as f:
+            domain_content = f.read()
+        print(f"Loaded original domain: {original_domain_path}")
+    except FileNotFoundError:
+        print(f"Error: Could not find {original_domain_path}")
+        return {"success": False, "error": "Original domain file not found"}
+    
+    # Step 2: Run fast-downward on the original files to check for errors
+    print("\nStep 2: Testing original PDDL files with fast-downward...")
+    
+    fd_command = f"python ./downward-release-24.06.1/downward-release-24.06.1/fast-downward.py --alias {FAST_DOWNWARD_ALIAS} {original_domain_path} {original_problem_path}"
+    print(f"Running: {fd_command}")
+    
+    exit_code, output, errors = run_command_with_timeout(fd_command, timeout_seconds=time_limit, capture_output=True)
+    
+    if exit_code == 0:
+        print("SUCCESS: Original PDDL files work fine. No RAG needed.")
+        return {"success": True, "message": "No errors found in original PDDL"}
+    
+    # Step 3: Extract error and use KG RAG to fix it
+    print(f"FAILED: Fast-downward failed with exit code {exit_code}")
+    print("Step 3: Analyzing error and using KG RAG to fix it...")
+    
+    error_reason = extract_error_reason(output, errors)
     print(f"Error reason: {error_reason}")
     
-    # Step 3: Initialize Knowledge Graph RAG system
-    print("\nStep 3: Initializing Knowledge Graph RAG system...")
+    # Initialize KG RAG
     try:
-        # Use the dedicated initializer to get the knowledge graph
         kg_initializer = PDDLKnowledgeGraphInitializer()
-        
         if not kg_initializer.initialize_knowledge_graph():
             raise Exception("Failed to initialize knowledge graph")
-        
-        # Get the initialized knowledge graph instance
         kg = kg_initializer.get_knowledge_graph_instance()
-        
-        # Initialize the Graph RAG QA system
         graph_rag_qa = PDDLGraphRAGQA(kg, COHERE_API_KEY)
-        
-        print("✅ Knowledge Graph RAG system initialized")
+        print("KG RAG system initialized")
     except Exception as e:
-        print(f"❌ Failed to initialize Knowledge Graph RAG: {e}")
-        print("Proceeding without RAG enhancement...")
-        return initial_result
+        print(f"Failed to initialize KG RAG: {e}")
+        return {"success": False, "error": f"KG RAG init failed: {e}"}
     
-    # Step 4: Query Knowledge Graph RAG for solution
-    print("\nStep 4: Querying Knowledge Graph RAG system...")
+    # Get RAG advice
     rag_context = query_knowledge_graph_for_solution(error_reason, graph_rag_qa)
     
-    # Step 5: Get original files for regeneration
-    print("\nStep 5: Loading original PDDL files...")
-    log_data = initial_result.get("log_data")
-    if not log_data:
-        print("❌ No log data available for regeneration")
-        return initial_result
-    
-    original_problem = log_data.get("generated_problem_pddl", "")
-    domain_content = log_data.get("generated_domain_pddl", "")
-    
-    if not original_problem:
-        print("❌ No problem PDDL found in logs")
-        return initial_result
-    
-    # Step 6: Regenerate problem file using Cohere with Knowledge Graph context
-    print("\nStep 6: Regenerating problem file with Cohere LLM and Knowledge Graph guidance...")
+    # Generate corrected problem
     corrected_problem = regenerate_problem_with_cohere_and_graph(
         original_problem, domain_content, error_reason, rag_context, task_id
     )
     
-    # Step 7: Save the corrected files
-    print("\nStep 7: Saving corrected problem and domain files...")
-    try:
-        # Create RAG-specific directory
-        rag_dir = f"experiments/run{run}/problems/llm_ic_pddl_rag/blocksworld"
-        os.makedirs(rag_dir, exist_ok=True)
+    # Step 4: Save corrected files
+    print("\nStep 4: Saving corrected files...")
+    
+    # Create directories - wrong_pddl goes inside the run directory
+    wrong_pddl_dir = f"experiments/run{run}/wrong_pddl/llm_ic_pddl_rag/{domain.name}"
+    corrected_dir = f"experiments/run{run}/problems/llm_ic_pddl_rag/{domain.name}"
+    os.makedirs(wrong_pddl_dir, exist_ok=True)
+    os.makedirs(corrected_dir, exist_ok=True)
+    
+    # Save faulty file
+    faulty_path = os.path.join(wrong_pddl_dir, f"{task_base_name}_faulty.pddl")
+    with open(faulty_path, 'w', encoding='utf-8') as f:
+        f.write(original_problem)
+    
+    # Save corrected files
+    corrected_problem_path = os.path.join(corrected_dir, f"{task_base_name}_rag.pddl")
+    corrected_domain_path = os.path.join(corrected_dir, f"{task_base_name}_domain_rag.pddl")
+    
+    with open(corrected_problem_path, 'w', encoding='utf-8') as f:
+        f.write(corrected_problem)
+    
+    with open(corrected_domain_path, 'w', encoding='utf-8') as f:
+        f.write(domain_content)
+    
+    print(f"Faulty file: {faulty_path}")
+    print(f"Corrected problem: {corrected_problem_path}")
+    print(f"Corrected domain: {corrected_domain_path}")
+    
+    # Step 5: Test corrected files and generate plan
+    print("\nStep 5: Testing corrected PDDL files and generating plan...")
+    
+    # Create plans directory
+    rag_plan_folder = f"experiments/run{run}/plans/llm_ic_pddl_rag/{domain.name}"
+    os.makedirs(rag_plan_folder, exist_ok=True)
+    
+    # Set up plan file paths
+    plan_file_name = os.path.join(rag_plan_folder, f"{task_base_name}_rag.pddl").replace('\\', '/')
+    sas_file_name = os.path.join(rag_plan_folder, f"{task_base_name}_rag.sas").replace('\\', '/')
+    
+    test_command = f"python ./downward-release-24.06.1/downward-release-24.06.1/fast-downward.py --alias {FAST_DOWNWARD_ALIAS} --plan-file {plan_file_name} --sas-file {sas_file_name} {corrected_domain_path} {corrected_problem_path}"
+    test_exit_code, test_output, test_errors = run_command_with_timeout(test_command, timeout_seconds=time_limit, capture_output=True)
+    
+    if test_exit_code == 0:
+        # Look for generated plan files
+        import glob
+        plan_files = glob.glob(f"{plan_file_name}*")
+        best_cost = 1e10
+        best_plan = ""
+        plan_found = False
         
-        # Save corrected problem file
-        problem_filename = f"p{task_id+1}_rag.pddl"  # +1 because tasks are 0-indexed
-        problem_path = os.path.join(rag_dir, problem_filename).replace('\\', '/')
+        for plan_fn in plan_files:
+            try:
+                with open(plan_fn, "r") as f:
+                    plans = f.readlines()
+                    if plans:
+                        cost = get_cost(plans[-1])
+                        if cost < best_cost:
+                            best_cost = cost
+                            best_plan = "\n".join([p.strip() for p in plans[:-1]])
+                            plan_found = True
+            except Exception as e:
+                print(f"Error reading plan file {plan_fn}: {e}")
+                continue
         
-        with open(problem_path, 'w', encoding='utf-8') as f:
-            f.write(corrected_problem)
-        
-        print(f"✅ Corrected problem saved to: {problem_path}")
-        
-        # Save the domain file for reference
-        domain_filename = f"p{task_id+1}_domain_rag.pddl"
-        domain_path = os.path.join(rag_dir, domain_filename).replace('\\', '/')
-        
-        with open(domain_path, 'w', encoding='utf-8') as f:
-            f.write(domain_content)
-        
-        print(f"✅ Domain file saved to: {domain_path}")
-        
-        # Create summary of Knowledge Graph RAG intervention
-        rag_summary = {
-            "task_id": task_id,
-            "run": run,
-            "initial_success": False,
-            "error_reason": error_reason,
-            "knowledge_graph_context": rag_context,
-            "rag_type": "Knowledge Graph RAG",
-            "corrected_files": {
-                "problem": problem_path,
-                "domain": domain_path
-            },
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        # Save RAG summary
-        summary_path = os.path.join(rag_dir, f"task_{task_id}_rag_summary.json")
-        with open(summary_path, 'w', encoding='utf-8') as f:
-            json.dump(rag_summary, f, indent=2)
-        
-        print(f"✅ RAG summary saved to: {summary_path}")
-        
-        print(f"\n{'='*60}")
-        print("KNOWLEDGE GRAPH RAG INTERVENTION COMPLETED")
-        print(f"Task {task_id} problem file regenerated and saved.")
-        print(f"Corrected files:")
-        print(f"  Problem: {problem_path}")
-        print(f"  Domain: {domain_path}")
-        print('='*60)
-        
+        if plan_found:
+            print(f"SUCCESS: Corrected PDDL files work! Plan found with cost: {best_cost}")
+            print(f"Plan saved to: {plan_file_name}")
+            return {
+                "success": True,
+                "message": "RAG successfully fixed the PDDL errors and generated plan",
+                "corrected_files": {
+                    "problem": corrected_problem_path,
+                    "domain": corrected_domain_path
+                },
+                "plan_file": plan_file_name,
+                "plan_cost": best_cost,
+                "faulty_file": faulty_path
+            }
+        else:
+            print("SUCCESS: Corrected PDDL files are valid, but no plan generated")
+            return {
+                "success": True,
+                "message": "RAG fixed PDDL errors but no plan was generated",
+                "corrected_files": {
+                    "problem": corrected_problem_path,
+                    "domain": corrected_domain_path
+                },
+                "faulty_file": faulty_path
+            }
+    else:
+        print(f"FAILED: Corrected files still have errors (exit code: {test_exit_code})")
         return {
-            "success": True,
-            "knowledge_graph_rag_applied": True,
-            "corrected_files": rag_summary["corrected_files"],
-            "error_reason": error_reason,
-            "knowledge_graph_context": rag_context,
-            "initial_result": initial_result
+            "success": False,
+            "message": "RAG could not fix the PDDL errors",
+            "error": f"Test failed with exit code {test_exit_code}"
         }
-        
-    except Exception as e:
-        print(f"❌ Error in RAG process: {e}")
-        return initial_result
 
 def llm_ic_pddl_planner(args, planner, domain):
     """
@@ -681,10 +704,6 @@ def llm_ic_pddl_planner(args, planner, domain):
     """
     context     = domain.get_context()
     domain_pddl = domain.get_domain_pddl()
-    
-    # Initialize logger
-    log_dir = f"./logs/run{args.run}"
-    logger = Logger(log_dir, args.task, "llm_ic_pddl")
     
     # create the tmp / result folders
     problem_folder = f"./experiments/run{args.run}/problems/llm_ic_pddl/{domain.name}"
@@ -704,18 +723,8 @@ def llm_ic_pddl_planner(args, planner, domain):
     task_nl, _ = domain.get_task(task)
     prompt = planner.create_llm_ic_pddl_prompt(task_nl, domain_pddl, context)
     
-    # Log the prompt
-    logger.log_prompt(prompt)
-    
     raw_result = planner.query(prompt)
-    
-    # Log the LLM response
-    logger.log_llm_response(raw_result)
-    
     domain_pddl_, task_pddl_ = planner.parse_domain_problem_result(raw_result)
-    
-    # Log the generated PDDL files
-    logger.log_generated_pddl(domain_pddl_, task_pddl_)
 
     # B. write both domain and problem files
     task_domain_file_name = f"./experiments/run{args.run}/problems/llm_ic_pddl/{task_suffix.replace('.pddl', '_domain.pddl')}"
@@ -736,13 +745,8 @@ def llm_ic_pddl_planner(args, planner, domain):
               f"--sas-file {sas_file_name} " + \
               f"{task_domain_file_name} {task_pddl_file_name}"
     
-    # Capture planner output for logging
     exit_code, planner_output, planner_errors = run_command_with_timeout(command, timeout_seconds=args.time_limit, capture_output=True)
     
-    # Log planner execution details
-    logger.log_planner_execution(command, planner_output, planner_errors, exit_code)
-    
-    # Also print to console for immediate feedback
     if planner_output:
         print(planner_output)
     if planner_errors:
@@ -767,19 +771,14 @@ def llm_ic_pddl_planner(args, planner, domain):
             except:
                 continue
 
-    # E. Log results and save
+    # E. Print results
     end_time = time.time()
     execution_time = end_time - start_time
     
     if best_plan:
         print(f"[info] task {task} takes {execution_time} sec, found a plan with cost {best_cost}")
-        logger.log_plan_result(True, best_cost, best_plan)
     else:
         print(f"[info] task {task} takes {execution_time} sec, no solution found")
-        logger.log_plan_result(False)
-    
-    logger.log_execution_time(execution_time)
-    logger.save_logs()
 
 def llm_pddl_planner(args, planner, domain):
     """
@@ -788,10 +787,6 @@ def llm_pddl_planner(args, planner, domain):
         will be asked to directly generate both domain and problem PDDL files without any context.
     """
     domain_nl = domain.get_domain_nl()
-    
-    # Initialize logger
-    log_dir = f"./logs/run{args.run}"
-    logger = Logger(log_dir, args.task, "llm_pddl")
     
     # create the tmp / result folders
     problem_folder = f"./experiments/run{args.run}/problems/llm_pddl/{domain.name}"
@@ -811,18 +806,8 @@ def llm_pddl_planner(args, planner, domain):
     task_nl, _ = domain.get_task(task)
     prompt = planner.create_llm_pddl_prompt(task_nl, domain_nl)
     
-    # Log the prompt
-    logger.log_prompt(prompt)
-    
     raw_result = planner.query(prompt)
-    
-    # Log the LLM response
-    logger.log_llm_response(raw_result)
-    
     domain_pddl_, task_pddl_ = planner.parse_domain_problem_result(raw_result)
-    
-    # Log the generated PDDL files
-    logger.log_generated_pddl(domain_pddl_, task_pddl_)
 
     # B. write both domain and problem files
     task_domain_file_name = f"./experiments/run{args.run}/problems/llm_pddl/{task_suffix.replace('.pddl', '_domain.pddl')}"
@@ -843,13 +828,8 @@ def llm_pddl_planner(args, planner, domain):
               f"--sas-file {sas_file_name} " + \
               f"{task_domain_file_name} {task_pddl_file_name}"
     
-    # Capture planner output for logging
     exit_code, planner_output, planner_errors = run_command_with_timeout(command, timeout_seconds=args.time_limit, capture_output=True)
     
-    # Log planner execution details
-    logger.log_planner_execution(command, planner_output, planner_errors, exit_code)
-    
-    # Also print to console for immediate feedback
     if planner_output:
         print(planner_output)
     if planner_errors:
@@ -874,19 +854,14 @@ def llm_pddl_planner(args, planner, domain):
             except:
                 continue
 
-    # E. Log results and save
+    # E. Print results
     end_time = time.time()
     execution_time = end_time - start_time
     
     if best_plan:
         print(f"[info] task {task} takes {execution_time} sec, found a plan with cost {best_cost}")
-        logger.log_plan_result(True, best_cost, best_plan)
     else:
         print(f"[info] task {task} takes {execution_time} sec, no solution found")
-        logger.log_plan_result(False)
-    
-    logger.log_execution_time(execution_time)
-    logger.save_logs()
 
 def llm_planner(args, planner, domain):
     """
@@ -945,7 +920,7 @@ def llm_ic_planner(args, planner, domain):
     # A. generate problem pddl file
     task_suffix        = domain.get_task_suffix(task)
     task_nl, _ = domain.get_task(task) 
-    prompt             = planner.create_llm_ic_prompt(task_nl, domain_nl, context)
+    prompt             = planner.create_llm_ic_prompt(task_nl, domain_nl, context, domain.name)
     text_plan          = planner.query(prompt)
 
     # B. write the problem file into the problem folder
@@ -974,7 +949,7 @@ def print_all_prompts(planner):
         task_suffix = domain.get_task_suffix(task)
 
         llm_prompt = planner.create_llm_prompt(task_nl, domain_nl)
-        llm_ic_prompt = planner.create_llm_ic_prompt(task_nl, domain_nl, context)
+        llm_ic_prompt = planner.create_llm_ic_prompt(task_nl, domain_nl, context, domain.name)
         llm_pddl_prompt = planner.create_llm_pddl_prompt(task_nl, domain_nl)
         llm_ic_pddl_prompt = planner.create_llm_ic_pddl_prompt(task_nl, domain_pddl, context)
         
@@ -989,7 +964,7 @@ def print_all_prompts(planner):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LLM-Planner")
-    parser.add_argument('--domain', type=str, choices=["blocksworld"], default="blocksworld")
+    parser.add_argument('--domain', type=str, choices=["blocksworld", "gripper"], default="blocksworld")
     parser.add_argument('--method', type=str, choices=["llm_ic_pddl_planner",
                                                        "llm_ic_pddl_rag",
                                                        "llm_pddl_planner",
@@ -1003,7 +978,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # 1. initialize problem domain
-    domain = Blocksworld()
+    if args.domain == "blocksworld":
+        domain = Blocksworld()
+    elif args.domain == "gripper":
+        domain = Gripper()
+    else:
+        raise ValueError(f"Unknown domain: {args.domain}")
 
     # 2. initialize the planner
     planner = Planner()

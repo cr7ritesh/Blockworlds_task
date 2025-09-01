@@ -8,3 +8,6 @@ downward*
 Neo4j*
 .claude
 __pycache__/
+KG.md
+project_method*
+kg_rag_chatbot.py
